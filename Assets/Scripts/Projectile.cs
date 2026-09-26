@@ -3,9 +3,9 @@ using UnityEngine;
 
 namespace Game.Combat
 {
-   
+
    /// Contrato para qualquer alvo que possa receber dano de um Projectile.
-  
+
     public interface IDamageable
     {
         void TakeDamage(float amount);
@@ -61,6 +61,7 @@ namespace Game.Combat
         private void Release()
         {
             _rigidbody.linearVelocity = Vector3.zero;
+            gameObject.SetActive(false);
             _releaseToPool?.Invoke(this);
         }
     }
