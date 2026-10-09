@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Serialization;
 
 namespace Game.Combat
 {
@@ -7,19 +8,26 @@ namespace Game.Combat
     public class WeaponData : ScriptableObject
     {
         [Tooltip("Tiros por segundo.")]
-        [SerializeField, Min(0.01f)] private float fireRate = 5f;
-        [SerializeField, Min(0f)] private float damage = 10f;
+        [FormerlySerializedAs("fireRate")] [SerializeField, Min(0.01f)] private float cadenciaTiro = 5f;
+        [FormerlySerializedAs("damage")] [SerializeField, Min(0f)] private float dano = 10f;
 
-        [SerializeField] private Projectile projectilePrefab;
-        [SerializeField, Min(0.01f)] private float projectileSpeed = 60f;
-        [SerializeField, Min(0.01f)] private float projectileLifetime = 4f;
+        [FormerlySerializedAs("projectilePrefab")] [SerializeField] private Projectile prefabProjetil;
+        [FormerlySerializedAs("projectileSpeed")] [SerializeField, Min(0.01f)] private float velocidadeProjetil = 60f;
+        [FormerlySerializedAs("projectileLifetime")] [SerializeField, Min(0.01f)] private float tempoVidaProjetil = 4f;
 
-        public float Damage => damage;
-        public Projectile ProjectilePrefab => projectilePrefab;
-        public float ProjectileSpeed => projectileSpeed;
-        public float ProjectileLifetime => projectileLifetime;
+        [Tooltip("Balas por pente. Ao zerar (ou apertar R) é preciso recarregar.")]
+        [SerializeField, Min(1)] private int tamanhoPente = 8;
+        [Tooltip("Tempo de recarga em segundos.")]
+        [SerializeField, Min(0f)] private float tempoRecarga = 1.5f;
 
-        /// <summary>Tempo entre disparos (segundos), derivado do fire rate.</summary>
-        public float FireInterval => 1f / fireRate;
+        public int MagazineSize => tamanhoPente;
+        public float ReloadTime => tempoRecarga;
+        public float Damage => dano;
+        public Projectile ProjectilePrefab => prefabProjetil;
+        public float ProjectileSpeed => velocidadeProjetil;
+        public float ProjectileLifetime => tempoVidaProjetil;
+
+     
+        public float FireInterval => 1f / cadenciaTiro;
     }
 }

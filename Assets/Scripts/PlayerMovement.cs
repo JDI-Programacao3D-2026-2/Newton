@@ -1,22 +1,25 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.Serialization;
 
 public class PlayerMove : MonoBehaviour
 {
     [Header("Movimento")]
-    [SerializeField] private float speed = 5f;
-    [SerializeField] private float rotationSpeed = 10f;
-    [SerializeField] private Transform cameraTransform;
+    [FormerlySerializedAs("speed")] [SerializeField] private float velocidade = 5f;
+    [FormerlySerializedAs("rotationSpeed")] [SerializeField] private float velocidadeRotacao = 10f;
+    [FormerlySerializedAs("cameraTransform")] [SerializeField] private Transform transformCamera;
+    [Tooltip("Corpo sempre virado pra onde a câmera olha (hero shooter).")]
+    [SerializeField] private bool olharParaCamera = true;
 
  
     [Header("Pulo")]
-    [SerializeField] private float jumpForce = 7f;
-    [SerializeField] private float groundCheckDistance = 1.1f;
+    [FormerlySerializedAs("jumpForce")] [SerializeField] private float forcaPulo = 7f;
+    [FormerlySerializedAs("groundCheckDistance")] [SerializeField] private float distanciaChao = 1.1f;
  
     [Header("Dash")]
-    [SerializeField] private float dashSpeed = 20f;
-    [SerializeField] private float dashDuration = 0.15f;
-    [SerializeField] private float dashCooldown = 0.8f;
+    [FormerlySerializedAs("dashSpeed")] [SerializeField] private float velocidadeDash = 20f;
+    [FormerlySerializedAs("dashDuration")] [SerializeField] private float duracaoDash = 0.15f;
+    [FormerlySerializedAs("dashCooldown")] [SerializeField] private float recargaDash = 0.8f;
 
     
  
@@ -100,8 +103,8 @@ public class PlayerMove : MonoBehaviour
 
  private Vector3 GetCameraDirection()
 {
-    Vector3 cameraForward = cameraTransform.forward;
-    Vector3 cameraRight = cameraTransform.right;
+    Vector3 cameraForward = transformCamera.forward;
+    Vector3 cameraRight = transformCamera.right;
 
     cameraForward.y = 0f;
     cameraRight.y = 0f;
@@ -122,21 +125,26 @@ public class PlayerMove : MonoBehaviour
 
     Vector3 velocity = rb.linearVelocity;
 
-    velocity.x = direction.x * speed;
-    velocity.z = direction.z * speed;
+    velocity.x = direction.x * velocidade;
+    velocity.z = direction.z * velocidade;
 
     rb.linearVelocity = velocity;
 
-    if (direction.sqrMagnitude > 0.01f)
+    // Hero shooter: o corpo sempre encara pra onde a câmera olha (o tiro sai no forward do jogador,
+    // então ele vai pra onde está a mira). Desmarque pra voltar a girar na direção do movimento.
+    bool seguirCamera = olharParaCamera && transformCamera != null;
+
+    if (seguirCamera || direction.sqrMagnitude > 0.01f)
     {
-        Quaternion targetRotation =
-            Quaternion.LookRotation(direction);
+        Quaternion targetRotation = seguirCamera
+            ? Quaternion.Euler(0f, transformCamera.eulerAngles.y, 0f)
+            : Quaternion.LookRotation(direction);
 
         rb.MoveRotation(
             Quaternion.Slerp(
                 rb.rotation,
                 targetRotation,
-                rotationSpeed * Time.fixedDeltaTime
+                velocidadeRotacao * Time.fixedDeltaTime
             )
         );
     }
@@ -156,7 +164,7 @@ public class PlayerMove : MonoBehaviour
         rb.linearVelocity = velocity;
  
         rb.AddForce(
-            Vector3.up * jumpForce,
+            Vector3.up * forcaPulo,
             ForceMode.Impulse
         );
     }
@@ -167,7 +175,7 @@ public class PlayerMove : MonoBehaviour
         return Physics.Raycast(
             transform.position,
             Vector3.down,
-            groundCheckDistance
+            distanciaChao
         );
     }
  
@@ -175,7 +183,7 @@ public class PlayerMove : MonoBehaviour
  
     private void StartDash()
 {
-    if (Time.time < lastDashTime + dashCooldown)
+    if (Time.time < lastDashTime + recargaDash)
         return;
 
     Vector3 direction = GetCameraDirection();
@@ -188,7 +196,7 @@ public class PlayerMove : MonoBehaviour
     dashDirection = direction;
 
     isDashing = true;
-    dashTimer = dashDuration;
+    dashTimer = duracaoDash;
     lastDashTime = Time.time;
 
     rb.linearVelocity = Vector3.zero;
@@ -198,7 +206,7 @@ public class PlayerMove : MonoBehaviour
     private void Dash()
     {
         rb.linearVelocity =
-            dashDirection * dashSpeed;
+            dashDirection * velocidadeDash;
  
         dashTimer -= Time.fixedDeltaTime;
  
