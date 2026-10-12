@@ -20,14 +20,11 @@ namespace Game.Combat
         private int _currentAmmo;
         private float _reloadEndTime;
 
-        /// Balas restantes no pente.
         public int CurrentAmmo => _currentAmmo;
         public int MagazineSize => dadosArma != null ? dadosArma.MagazineSize : 0;
         public bool IsReloading { get; private set; }
 
-        /// Para a UI: (balas atuais, tamanho do pente).
         public event System.Action<int, int> AmmoChanged;
-        /// Para a UI: duração da recarga em segundos, disparado ao iniciar.
         public event System.Action<float> ReloadStarted;
         public event System.Action ReloadFinished;
 
@@ -47,7 +44,7 @@ namespace Game.Combat
 
         private void Update()
         {
-            // Vitória: ENTER reinicia a fase. Enquanto isso, a arma fica travada.
+            // vitória: ENTER reinicia a fase
             if (EnemyController.AllDefeated)
             {
                 Cursor.lockState = CursorLockMode.None;
@@ -70,7 +67,7 @@ namespace Game.Combat
                 TryFire();
         }
 
-        // HUD simples (OnGUI) para não depender de Canvas na cena: mira + munição + aviso de recarga.
+        // HUD: mira, munição e recarga
         private void OnGUI()
         {
             if (dadosArma == null) return;
@@ -151,7 +148,7 @@ namespace Game.Combat
                 QueryTriggerInteraction.Ignore);
             for (int i = 0; i < count; i++)
             {
-                if (_aimHits[i].transform.IsChildOf(transform)) continue; // ignora o próprio jogador
+                if (_aimHits[i].transform.IsChildOf(transform)) continue;
                 if (_aimHits[i].distance < nearest)
                 {
                     nearest = _aimHits[i].distance;
@@ -161,7 +158,7 @@ namespace Game.Combat
 
             Vector3 direction = (target - bocaDoCano.position).normalized;
 
-            // Alvo colado/atrás do cano (ex: parede encostada): cai pro forward do corpo.
+            // alvo atrás do cano: usa a frente do corpo
             return Vector3.Dot(direction, transform.forward) > 0.1f ? direction : transform.forward;
         }
 
@@ -179,7 +176,7 @@ namespace Game.Combat
 
         private void ReturnProjectileToPool(Projectile projectile)
         {
-            if (projectile == null) return; // pode ter sido destruído (ex: troca de cena)
+            if (projectile == null) return;
 
             projectile.gameObject.SetActive(false);
             _pooledProjectiles.Enqueue(projectile);

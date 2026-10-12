@@ -3,8 +3,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.Serialization;
 
-/// Câmera de ombro (terceira pessoa) travada no jogador: o mouse gira a mira livremente, a câmera fica
-/// atrás e ao lado do ombro e não atravessa paredes.
+// Câmera de terceira pessoa sobre o ombro do jogador
 public class MouseOrbit : MonoBehaviour
 {
     [FormerlySerializedAs("player")] public Transform jogador;
@@ -33,14 +32,7 @@ public class MouseOrbit : MonoBehaviour
 
     private void Awake()
     {
-        if (jogador == null)
-        {
-            Debug.LogError($"{nameof(MouseOrbit)}: jogador não atribuído em '{name}'.", this);
-            enabled = false;
-            return;
-        }
-
-        // Cinemachine fora do caminho: quem posiciona a câmera é este script.
+        // desliga o Cinemachine: esta câmera é controlada por este script
         CinemachineCamera cinemachineCam = GetComponent<CinemachineCamera>();
         if (cinemachineCam != null) cinemachineCam.enabled = false;
 
@@ -52,12 +44,21 @@ public class MouseOrbit : MonoBehaviour
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
 
-        // Começa olhando na mesma direção do jogador.
-        rotX = jogador.eulerAngles.y;
+        if (jogador != null) rotX = jogador.eulerAngles.y;
     }
 
     private void LateUpdate()
     {
+        // player gerado pelo MapaGerador: procura pela tag
+        if (jogador == null)
+        {
+            GameObject achado = GameObject.FindGameObjectWithTag("Player");
+            if (achado == null) return;
+
+            jogador = achado.transform;
+            rotX = jogador.eulerAngles.y;
+        }
+
         if (Mouse.current != null)
         {
             Vector2 delta = Mouse.current.delta.ReadValue() * sensibilidadeMouse;
@@ -69,12 +70,11 @@ public class MouseOrbit : MonoBehaviour
         Quaternion rotation = Quaternion.Euler(rotY, rotX, 0f);
         Vector3 pivot = jogador.position + Vector3.up * alturaPivo;
 
-        // Começa no ombro (lateral) e recua pra trás a partir dali.
         Vector3 shoulder = pivot + rotation * Vector3.right * deslocamentoOmbro;
         Vector3 back = rotation * Vector3.back;
         float distance = distanciaCamera;
 
-        // Se algo estiver entre o ombro e a câmera, aproxima a câmera pra não atravessar a parede.
+        // aproxima a câmera se houver parede no caminho
         int mask = camadasColisao.value & ~(1 << jogador.gameObject.layer);
         if (Physics.SphereCast(shoulder, raioColisao, back, out RaycastHit hit, distanciaCamera, mask,
                 QueryTriggerInteraction.Ignore))
@@ -86,7 +86,7 @@ public class MouseOrbit : MonoBehaviour
 
         _camera.SetPositionAndRotation(position, rotation);
 
-        // O PlayerMovement pode ter este objeto como referência de câmera: mantém os dois iguais.
+        // mantém este objeto na mesma posição da câmera
         if (_camera != transform) transform.SetPositionAndRotation(position, rotation);
     }
 }

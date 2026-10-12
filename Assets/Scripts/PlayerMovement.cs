@@ -39,6 +39,10 @@ public class PlayerMove : MonoBehaviour
     private void Awake()
     {
         rb = GetComponent<Rigidbody>();
+
+        // sem câmera atribuída (player gerado), usa a principal
+        if (transformCamera == null && Camera.main != null)
+            transformCamera = Camera.main.transform;
     }
  
     private void Update()
@@ -130,8 +134,7 @@ public class PlayerMove : MonoBehaviour
 
     rb.linearVelocity = velocity;
 
-    // Hero shooter: o corpo sempre encara pra onde a câmera olha (o tiro sai no forward do jogador,
-    // então ele vai pra onde está a mira). Desmarque pra voltar a girar na direção do movimento.
+    // corpo sempre virado pra onde a câmera olha
     bool seguirCamera = olharParaCamera && transformCamera != null;
 
     if (seguirCamera || direction.sqrMagnitude > 0.01f)
