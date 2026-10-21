@@ -24,6 +24,18 @@ namespace Game.Combat
         [FormerlySerializedAs("projectileLifetime")] [SerializeField, Min(0.01f)] private float tempoVidaProjetil = 4f;
         [FormerlySerializedAs("attackCooldown")] [SerializeField, Min(0.01f)] private float intervaloAtaque = 1.5f;
 
+        [Header("Corpo a corpo")]
+        [Tooltip("Ataca de perto com a espada, sem projétil. O alcance é o 'Alcance Ataque' acima.")]
+        [SerializeField] private bool corpoACorpo;
+        [Tooltip("Animação da espada descendo (componente Animation no objeto Espada)")]
+        [SerializeField] private Animation animacaoEspada;
+        [Tooltip("Tempo entre começar o golpe e o dano valer (dá chance de desviar)")]
+        [SerializeField, Min(0f)] private float atrasoGolpe = 0.2f;
+
+        [Header("Pool de projéteis")]
+        [Tooltip("Projéteis criados já no início, pra não dar Instantiate no meio da partida")]
+        [SerializeField, Min(0)] private int tamanhoPool = 5;
+
         [Header("Visão")]
         [Tooltip("Ângulo total do cone de visão, em graus")]
         [SerializeField, Range(10f, 360f)] private float campoDeVisao = 110f;
@@ -44,6 +56,43 @@ namespace Game.Combat
         // todos os inimigos foram derrotados
         public static bool AllDefeated => _alive == 0 && _killed > 0;
 
+        // placar (tecla Tab)
+        public static int Abates => _killed;
+        public static int Vivos => _alive;
+
+        public bool CorpoACorpo => corpoACorpo;
+
+        // atordoado: não anda, não ataca (o FSM e o disparo conferem isso)
+        private float _atordoadoAte;
+        private Renderer _corpo;
+        private MaterialPropertyBlock _tinta;
+        public bool Atordoado => Time.time < _atordoadoAte;
+
+        public void Atordoar(float segundos)
+        {
+            if (IsDead) return;
+
+            _atordoadoAte = Mathf.Max(_atordoadoAte, Time.time + segundos);
+            _agent.isStopped = true;
+
+            // fica amarelo enquanto dura
+            _corpo ??= GetComponent<Renderer>();
+            if (_corpo != null)
+            {
+                _tinta ??= new MaterialPropertyBlock();
+                _tinta.SetColor("_BaseColor", new Color(1f, 0.9f, 0.1f));
+                _corpo.SetPropertyBlock(_tinta);
+            }
+
+            CancelInvoke(nameof(FimAtordoamento));
+            Invoke(nameof(FimAtordoamento), _atordoadoAte - Time.time);
+        }
+
+        private void FimAtordoamento()
+        {
+            if (_corpo != null) _corpo.SetPropertyBlock(null);
+        }
+
         private NavMeshAgent _agent;
         private readonly Queue<Projectile> _pooledProjectiles = new Queue<Projectile>();
         private readonly RaycastHit[] _sightHits = new RaycastHit[16];
@@ -53,7 +102,15 @@ namespace Game.Combat
         /// Disparado quando o inimigo leva dano (o FSM usa pra investigar de onde veio o tiro).
         public event System.Action Damaged;
 
-        public Transform Jogador => jogador;
+        // Se o jogador ainda não existia (ou foi destruído e recriado), procura de novo pela tag
+        public Transform Jogador
+        {
+            get
+            {
+                if (jogador == null) jogador = FindPlayerByTag();
+                return jogador;
+            }
+        }
         public bool IsDead => _currentHealth <= 0f;
         public float VidaFracao => _currentHealth / vidaMaxima;
 
@@ -78,10 +135,15 @@ namespace Game.Combat
             if (jogador == null)
                 Debug.LogWarning($"{nameof(EnemyController)}: nenhum objeto com a tag \"Player\" na cena ('{name}').", this);
 
-            if (prefabProjetil == null || bocaDoCano == null)
+            if (!corpoACorpo && (prefabProjetil == null || bocaDoCano == null))
             {
                 Debug.LogError($"{nameof(EnemyController)}: Projectile Prefab ou Muzzle não atribuídos em '{name}'.", this);
                 enabled = false;
+            }
+            else if (!corpoACorpo)
+            {
+                for (int i = 0; i < tamanhoPool; i++)
+                    ReturnProjectileToPool(CreateProjectile());
             }
 
             // Prefab antigo sem o FSM: adiciona
@@ -109,6 +171,11 @@ namespace Game.Combat
                 _counted = false;
                 _alive--;
             }
+
+            // os projéteis do pool não são filhos do inimigo: limpa pra não ficarem soltos na cena
+            foreach (Projectile projectile in _pooledProjectiles)
+                if (projectile != null) Destroy(projectile.gameObject);
+            _pooledProjectiles.Clear();
         }
 
         public void Curar(float quantidade)
@@ -198,9 +265,17 @@ namespace Game.Combat
 
         public void TryFire()
         {
-            if (Time.time < _nextAttackTime) return;
+            if (Atordoado || Time.time < _nextAttackTime) return;
 
             _nextAttackTime = Time.time + intervaloAtaque;
+
+            // espada: a lâmina desce e, no meio do golpe, o dano vale se o jogador ainda estiver perto
+            if (corpoACorpo)
+            {
+                if (animacaoEspada != null) animacaoEspada.Play();
+                Invoke(nameof(AplicarGolpe), atrasoGolpe);
+                return;
+            }
 
             Vector3 direction = (jogador.position - bocaDoCano.position).normalized;
 
@@ -208,6 +283,18 @@ namespace Game.Combat
             projectile.transform.SetPositionAndRotation(bocaDoCano.position, Quaternion.LookRotation(direction));
             projectile.gameObject.SetActive(true);
             projectile.Launch(direction, velocidadeProjetil, dano, tempoVidaProjetil, ReturnProjectileToPool);
+        }
+
+        private void AplicarGolpe()
+        {
+            if (IsDead || Atordoado || jogador == null) return;
+
+            // um pouco de folga: o jogador pode ter andado durante o golpe
+            float alcance = AlcanceEfetivo * 1.3f;
+            if ((jogador.position - transform.position).sqrMagnitude > alcance * alcance) return;
+
+            if (jogador.TryGetComponent(out IDamageable alvo))
+                alvo.TakeDamage(dano);
         }
 
         private Projectile GetPooledProjectile() =>
@@ -223,6 +310,13 @@ namespace Game.Combat
         private void ReturnProjectileToPool(Projectile projectile)
         {
             if (projectile == null) return;
+
+            // tiro que ainda voava quando o dono morreu: não tem pool pra voltar
+            if (this == null)
+            {
+                Destroy(projectile.gameObject);
+                return;
+            }
 
             projectile.gameObject.SetActive(false);
             _pooledProjectiles.Enqueue(projectile);

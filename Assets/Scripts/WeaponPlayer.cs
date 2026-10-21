@@ -1,7 +1,7 @@
 using System.Collections.Generic;
+using UnityEngine.UI;
 using UnityEngine;
 using UnityEngine.InputSystem;
-using UnityEngine.SceneManagement;
 using UnityEngine.Serialization;
 
 namespace Game.Combat
@@ -14,6 +14,31 @@ namespace Game.Combat
         [Tooltip("Ponto de saída do projétil (ponta do cano). Usado só como POSIÇÃO de spawn — a direção do tiro é o forward do Player.")]
         [FormerlySerializedAs("muzzle")] [SerializeField] private Transform bocaDoCano;
 
+        [Header("HUD (Canvas)")]
+        [SerializeField] private Text textoMunicao;
+        [Tooltip("Painel do placar, mostrado enquanto a tecla Tab está apertada")]
+        [SerializeField] private GameObject painelFrags;
+        [SerializeField] private Text textoFrags;
+
+        [Header("Pool de projéteis")]
+        [Tooltip("Projéteis criados já no início, pra não dar Instantiate no meio da partida")]
+        [SerializeField, Min(0)] private int tamanhoPool = 20;
+
+        [Header("Corpo a corpo (Espadachim)")]
+        [Tooltip("Liga: o clique esquerdo golpeia com a espada em vez de atirar")]
+        [SerializeField] private bool corpoACorpo;
+        [Tooltip("Animação da espada descendo (componente Animation no objeto Espada)")]
+        [SerializeField] private Animation animacaoEspada;
+        [SerializeField, Min(0.5f)] private float alcanceEspada = 2.5f;
+        [SerializeField, Range(10f, 180f)] private float anguloEspada = 110f;
+        [SerializeField, Min(0f)] private float danoEspada = 25f;
+        [SerializeField, Min(0.1f)] private float intervaloEspada = 0.6f;
+        [Tooltip("Tempo entre começar o golpe e o dano valer")]
+        [SerializeField, Min(0f)] private float atrasoGolpe = 0.2f;
+
+        private readonly Collider[] _golpeColliders = new Collider[32];
+        private readonly HashSet<IDamageable> _golpeAlvos = new HashSet<IDamageable>();
+
         private readonly Queue<Projectile> _pooledProjectiles = new Queue<Projectile>();
         private float _nextFireTime;
 
@@ -23,6 +48,7 @@ namespace Game.Combat
         public int CurrentAmmo => _currentAmmo;
         public int MagazineSize => dadosArma != null ? dadosArma.MagazineSize : 0;
         public bool IsReloading { get; private set; }
+        public bool CorpoACorpo => corpoACorpo;
 
         public event System.Action<int, int> AmmoChanged;
         public event System.Action<float> ReloadStarted;
@@ -30,6 +56,8 @@ namespace Game.Combat
 
         private void Awake()
         {
+            if (corpoACorpo) return; // espada: sem arma, munição nem pool
+
             if (dadosArma == null || dadosArma.ProjectilePrefab == null || bocaDoCano == null)
             {
                 Debug.LogError($"{nameof(WeaponPlayer)}: WeaponData, Projectile Prefab ou Muzzle não atribuídos em '{name}'.", this);
@@ -38,24 +66,23 @@ namespace Game.Combat
             }
 
             _currentAmmo = dadosArma.MagazineSize;
+
+            for (int i = 0; i < tamanhoPool; i++)
+                ReturnProjectileToPool(CreateProjectile());
         }
 
-        private void Start() => AmmoChanged?.Invoke(_currentAmmo, MagazineSize);
+        private void Start()
+        {
+            AmmoChanged?.Invoke(_currentAmmo, MagazineSize);
+            AtualizarTextoMunicao();
+        }
 
         private void Update()
         {
-            // vitória: ENTER reinicia a fase
-            if (EnemyController.AllDefeated)
-            {
-                Cursor.lockState = CursorLockMode.None;
-                Cursor.visible = true;
+            AtualizarFrags();
 
-                if (Keyboard.current != null &&
-                    (Keyboard.current.enterKey.wasPressedThisFrame || Keyboard.current.numpadEnterKey.wasPressedThisFrame))
-                    SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
-
-                return;
-            }
+            // jogo pausado (confirmação de saída, vitória ou derrota): não atira nem recarrega
+            if (Time.timeScale == 0f) return;
 
             if (IsReloading && Time.time >= _reloadEndTime)
                 FinishReload();
@@ -70,40 +97,51 @@ namespace Game.Combat
         // HUD: mira, munição e recarga
         private void OnGUI()
         {
-            if (dadosArma == null) return;
-
-            if (EnemyController.AllDefeated)
-            {
-                var titulo = new GUIStyle(GUI.skin.label) { fontSize = 64, fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter };
-                titulo.normal.textColor = Color.green;
-                var subtitulo = new GUIStyle(GUI.skin.label) { fontSize = 28, alignment = TextAnchor.MiddleCenter };
-                subtitulo.normal.textColor = Color.white;
-
-                GUI.Label(new Rect(0f, Screen.height * 0.35f, Screen.width, 90f), "Você venceu!", titulo);
-                GUI.Label(new Rect(0f, Screen.height * 0.35f + 90f, Screen.width, 50f), "Aperte ENTER para jogar de novo", subtitulo);
-                return;
-            }
+            if (dadosArma == null || Time.timeScale == 0f) return;
 
             float cx = Screen.width * 0.5f;
             float cy = Screen.height * 0.5f;
             GUI.Box(new Rect(cx - 2f, cy - 2f, 4f, 4f), GUIContent.none);
+        }
 
-            var estilo = new GUIStyle(GUI.skin.label) { fontSize = 28, fontStyle = FontStyle.Bold, alignment = TextAnchor.LowerRight };
-            estilo.normal.textColor = _currentAmmo == 0 ? Color.red : Color.white;
+        // Placar enquanto Tab está apertada
+        private void AtualizarFrags()
+        {
+            if (painelFrags == null) return;
+
+            bool ver = Keyboard.current != null && Keyboard.current.tabKey.isPressed;
+            if (painelFrags.activeSelf != ver) painelFrags.SetActive(ver);
+
+            if (ver && textoFrags != null)
+                textoFrags.text = $"Abates: {EnemyController.Abates}\nRestantes: {EnemyController.Vivos}";
+        }
+
+        // HUD de munição no Canvas (o texto é atribuído no Inspector)
+        private void AtualizarTextoMunicao()
+        {
+            if (textoMunicao == null) return;
+
+            if (corpoACorpo)
+            {
+                textoMunicao.text = "Espada";
+                return;
+            }
 
             string texto = IsReloading ? "Recarregando..." : $"Munição: {_currentAmmo}/{dadosArma.MagazineSize}";
             if (!IsReloading && _currentAmmo == 0) texto += "  (R)";
 
-            GUI.Label(new Rect(Screen.width - 420f, Screen.height - 70f, 400f, 50f), texto, estilo);
+            textoMunicao.text = texto;
+            textoMunicao.color = _currentAmmo == 0 ? Color.red : Color.white;
         }
 
         public void StartReload()
         {
-            if (IsReloading || _currentAmmo >= dadosArma.MagazineSize) return;
+            if (corpoACorpo || IsReloading || _currentAmmo >= dadosArma.MagazineSize) return;
 
             IsReloading = true;
             _reloadEndTime = Time.time + dadosArma.ReloadTime;
             ReloadStarted?.Invoke(dadosArma.ReloadTime);
+            AtualizarTextoMunicao();
         }
 
         private void FinishReload()
@@ -112,10 +150,51 @@ namespace Game.Combat
             _currentAmmo = dadosArma.MagazineSize;
             AmmoChanged?.Invoke(_currentAmmo, MagazineSize);
             ReloadFinished?.Invoke();
+            AtualizarTextoMunicao();
+        }
+
+        // Espada: a lâmina desce e, no meio do golpe, o dano vale pra quem estiver na frente
+        private void Golpear()
+        {
+            if (Time.time < _nextFireTime) return;
+
+            _nextFireTime = Time.time + intervaloEspada;
+            if (animacaoEspada != null) animacaoEspada.Play();
+            Invoke(nameof(AplicarGolpe), atrasoGolpe);
+        }
+
+        private void AplicarGolpe()
+        {
+            int count = Physics.OverlapSphereNonAlloc(transform.position, alcanceEspada, _golpeColliders,
+                Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+
+            _golpeAlvos.Clear();
+            for (int i = 0; i < count; i++)
+            {
+                Collider alvoCollider = _golpeColliders[i];
+                if (alvoCollider.transform.IsChildOf(transform)) continue;
+
+                IDamageable alvo = alvoCollider.GetComponentInParent<IDamageable>();
+                if (alvo == null) continue;
+
+                // só quem está na frente (cone) e uma vez por golpe (o inimigo tem mais de um collider)
+                Vector3 direcao = alvoCollider.transform.position - transform.position;
+                direcao.y = 0f;
+                if (Vector3.Angle(transform.forward, direcao) > anguloEspada * 0.5f) continue;
+
+                if (_golpeAlvos.Add(alvo))
+                    alvo.TakeDamage(danoEspada);
+            }
         }
 
         public void TryFire()
         {
+            if (corpoACorpo)
+            {
+                Golpear();
+                return;
+            }
+
             if (IsReloading || Time.time < _nextFireTime) return;
 
             // Pente vazio: não atira. A recarga é manual (tecla R).
@@ -123,8 +202,15 @@ namespace Game.Combat
 
             _currentAmmo--;
             AmmoChanged?.Invoke(_currentAmmo, MagazineSize);
+            AtualizarTextoMunicao();
             _nextFireTime = Time.time + dadosArma.FireInterval;
 
+            Disparar();
+        }
+
+        // Lança um projétil do pool agora, sem gastar munição nem respeitar intervalo (a rajada usa isso)
+        public void Disparar()
+        {
             Vector3 direction = GetAimDirection();
             Projectile projectile = GetPooledProjectile();
             projectile.transform.SetPositionAndRotation(bocaDoCano.position, Quaternion.LookRotation(direction));

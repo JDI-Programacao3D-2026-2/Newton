@@ -32,6 +32,10 @@ namespace Game.Combat
         [Tooltip("Segundos indo ao último lugar onde viu o jogador antes de patrulhar")]
         [SerializeField, Min(0f)] private float tempoMemoria = 5f;
 
+        [Header("Alerta")]
+        [Tooltip("Ao ver o jogador ou levar dano, chama os amigos que estão patrulhando dentro deste raio")]
+        [SerializeField, Min(0f)] private float raioAlerta = 20f;
+
         [Header("Patrulha")]
         [SerializeField, Min(1f)] private float raioPatrulha = 15f;
         [SerializeField, Min(0f)] private float esperaPatrulhaMin = 1f;
@@ -57,8 +61,12 @@ namespace Game.Combat
         // pontos já escolhidos por outros inimigos, pra não irem todos pro mesmo lugar
         private static readonly Dictionary<EnemyFSM, Vector3> HideClaims = new Dictionary<EnemyFSM, Vector3>();
 
+        // todos os inimigos ativos, pra chamar os amigos
+        private static readonly List<EnemyFSM> Ativos = new List<EnemyFSM>();
+
         private EnemyController _ctrl;
         private NavMeshAgent _agent;
+        private bool _estavaAtordoado;
 
         // memória do jogador
         private Vector3 _lastKnownPlayerPos;
@@ -93,13 +101,37 @@ namespace Game.Combat
             estadoAtual = EnemyState.Patrol; // começa sem saber onde o jogador está
         }
 
-        private void OnEnable() => _ctrl.Damaged += OnDamaged;
-        private void OnDisable() => _ctrl.Damaged -= OnDamaged;
+        private void OnEnable()
+        {
+            _ctrl.Damaged += OnDamaged;
+            Ativos.Add(this);
+        }
+
+        private void OnDisable()
+        {
+            _ctrl.Damaged -= OnDamaged;
+            Ativos.Remove(this);
+        }
         private void OnDestroy() => HideClaims.Remove(this);
 
         private void Update()
         {
             if (!_ctrl.enabled || _ctrl.IsDead || Jogador == null) return;
+
+            // atordoado: parado até acabar, e depois escolhe de novo o que fazer
+            if (_ctrl.Atordoado)
+            {
+                _agent.isStopped = true;
+                _estavaAtordoado = true;
+                return;
+            }
+
+            if (_estavaAtordoado)
+            {
+                _estavaAtordoado = false;
+                _agent.isStopped = false;
+                _nextCoverRepathTime = 0f;
+            }
 
             switch (estadoAtual)
             {
@@ -157,7 +189,31 @@ namespace Game.Combat
             if (Jogador == null) return;
 
             NotePlayerSeen();
-            if (estadoAtual == EnemyState.Patrol) ChangeState(EnemyState.Pursuit);
+            if (estadoAtual == EnemyState.Patrol)
+            {
+                ChamarAmigos();
+                ChangeState(EnemyState.Pursuit);
+            }
+        }
+
+        // Avisa os amigos que patrulham por perto: eles vão até onde o jogador está
+        private void ChamarAmigos()
+        {
+            foreach (EnemyFSM amigo in Ativos)
+            {
+                if (amigo == this || amigo._ctrl.IsDead || amigo.estadoAtual != EnemyState.Patrol) continue;
+                if ((amigo.transform.position - transform.position).sqrMagnitude > raioAlerta * raioAlerta) continue;
+
+                amigo.ReceberAlerta(Jogador.position);
+            }
+        }
+
+        private void ReceberAlerta(Vector3 posicaoDoJogador)
+        {
+            _lastKnownPlayerPos = posicaoDoJogador;
+            _lastSeenTime = Time.time;
+            _hasLastKnown = true;
+            ChangeState(EnemyState.Pursuit);
         }
 
         private void NotePlayerSeen()
@@ -181,6 +237,7 @@ namespace Game.Combat
             if (_ctrl.CanSeePlayer())
             {
                 NotePlayerSeen();
+                ChamarAmigos();
                 ChangeState(EnemyState.Pursuit);
                 return;
             }
@@ -244,6 +301,13 @@ namespace Game.Combat
             {
                 NotePlayerSeen();
 
+                // melee não usa cobertura: chega perto e bate
+                if (_ctrl.CorpoACorpo)
+                {
+                    AtacarCorpoACorpo();
+                    return;
+                }
+
                 // no alcance: procura uma posição de cobertura
                 float sqrDistance = (Jogador.position - transform.position).sqrMagnitude;
                 if (sqrDistance <= _ctrl.AlcanceEfetivo * _ctrl.AlcanceEfetivo)
@@ -269,6 +333,22 @@ namespace Game.Combat
 
             bool chegou = !_agent.pathPending && _agent.remainingDistance <= _agent.stoppingDistance + 0.8f;
             if (chegou) ChangeState(EnemyState.Patrol);
+        }
+
+        // Dentro do alcance da espada para e ataca; fora dele, corre até o jogador
+        private void AtacarCorpoACorpo()
+        {
+            float sqrDistance = (Jogador.position - transform.position).sqrMagnitude;
+            if (sqrDistance <= _ctrl.AlcanceEfetivo * _ctrl.AlcanceEfetivo)
+            {
+                _agent.isStopped = true;
+                _ctrl.RotateTowards(Jogador.position);
+                _ctrl.TryFire();
+                return;
+            }
+
+            _agent.isStopped = false;
+            _agent.SetDestination(Jogador.position);
         }
 
         // ---------- Cobertura ----------

@@ -1,9 +1,28 @@
+using Game.Combat;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
 using UnityEngine.Serialization;
+using UnityEngine.UI;
 
-public class PlayerMove : MonoBehaviour
+public class PlayerMove : MonoBehaviour, IDamageable
 {
+    [Header("Vida")]
+    [SerializeField] private float vidaMaxima = 100f;
+    [Tooltip("Image do coração no Canvas, com Image Type = Filled (Vertical).")]
+    [SerializeField] private Image coracao;
+    [SerializeField] private Text textoVida;
+
+    private float _vida;
+
+    [Header("Tela de sair / vitória / derrota (Canvas)")]
+    [SerializeField] private GameObject painelFim;
+    [SerializeField] private Text textoFim;
+    [SerializeField] private string nomeCenaMenu = "Menu";
+
+    private enum Tela { Jogando, Pausa, Venceu, Perdeu }
+    private Tela _tela = Tela.Jogando;
+
     [Header("Movimento")]
     [FormerlySerializedAs("speed")] [SerializeField] private float velocidade = 5f;
     [FormerlySerializedAs("rotationSpeed")] [SerializeField] private float velocidadeRotacao = 10f;
@@ -43,11 +62,103 @@ public class PlayerMove : MonoBehaviour
         // sem câmera atribuída (player gerado), usa a principal
         if (transformCamera == null && Camera.main != null)
             transformCamera = Camera.main.transform;
+
+        _vida = vidaMaxima;
+        AtualizarHudVida();
+    }
+
+    public void TakeDamage(float amount)
+    {
+        if (_vida <= 0f) return;
+
+        _vida = Mathf.Max(0f, _vida - amount);
+        AtualizarHudVida();
+
+        // morreu: mostra a tela de derrota
+        if (_vida <= 0f)
+            MostrarTela(Tela.Perdeu, "VOCE PERDEU!\n\nENTER = jogar de novo\nESC = menu");
+    }
+
+    private void AtualizarHudVida()
+    {
+        if (coracao != null) coracao.fillAmount = _vida / vidaMaxima;
+        if (textoVida != null) textoVida.text = Mathf.CeilToInt(_vida).ToString();
     }
  
     private void Update()
     {
+        AtualizarTela();
+
+        // pausado (sair, vitória ou derrota): não lê movimento
+        if (_tela != Tela.Jogando) return;
+
         ReadInput();
+    }
+
+    // ---------- Telas: sair, vitória e derrota ----------
+
+    // Sair do jogo pergunta antes (Esc, depois ENTER confirma). Vitória e derrota oferecem jogar de novo ou menu.
+    private void AtualizarTela()
+    {
+        Keyboard teclado = Keyboard.current;
+        if (teclado == null) return;
+
+        bool enter = teclado.enterKey.wasPressedThisFrame || teclado.numpadEnterKey.wasPressedThisFrame;
+        bool esc = teclado.escapeKey.wasPressedThisFrame;
+
+        switch (_tela)
+        {
+            case Tela.Jogando:
+                if (EnemyController.AllDefeated) MostrarTela(Tela.Venceu, "VOCE VENCEU!\n\nENTER = jogar de novo\nESC = menu");
+                else if (esc) MostrarTela(Tela.Pausa, "VOLTAR AO MENU?\n\nENTER = sim\nESC = continuar");
+                break;
+
+            case Tela.Pausa:
+                if (enter) VoltarAoMenu();
+                else if (esc) Continuar();
+                break;
+
+            case Tela.Venceu:
+            case Tela.Perdeu:
+                if (enter) JogarDeNovo();
+                else if (esc) VoltarAoMenu();
+                break;
+        }
+    }
+
+    private void MostrarTela(Tela tela, string texto)
+    {
+        _tela = tela;
+        Time.timeScale = 0f; // congela o jogo enquanto a tela está aberta
+
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+
+        painelFim.SetActive(true);
+        textoFim.text = texto;
+    }
+
+    private void Continuar()
+    {
+        _tela = Tela.Jogando;
+        Time.timeScale = 1f;
+
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
+
+        painelFim.SetActive(false);
+    }
+
+    private void VoltarAoMenu()
+    {
+        Time.timeScale = 1f;
+        SceneManager.LoadScene(nomeCenaMenu);
+    }
+
+    private void JogarDeNovo()
+    {
+        Time.timeScale = 1f;
+        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
     }
  
     private void FixedUpdate()

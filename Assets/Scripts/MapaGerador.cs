@@ -51,6 +51,9 @@ public class MapaGerador : MonoBehaviour
 
     void Start()
     {
+        // veio do menu: usa o mapa escolhido lá (rodando a cena direto, vale o do Inspector)
+        if (MenuInicial.MapaEscolhido != null) imagemDoMapa = MenuInicial.MapaEscolhido;
+
         StartCoroutine(GerarMapaInterno(instantaneo: false));
     }
 
@@ -92,6 +95,10 @@ public class MapaGerador : MonoBehaviour
         // seguro garantir que não sobra nenhum player duplicado de qualquer jeito.
         foreach (GameObject p in GameObject.FindGameObjectsWithTag("Player"))
         {
+            // Destroy só vale no fim do frame: tira a tag já, senão um inimigo que nasce neste mesmo
+            // frame (mapa pequeno) acharia o player antigo e ficaria parado depois que ele sumisse.
+            p.tag = "Untagged";
+
             if (Application.isPlaying) Destroy(p);
             else DestroyImmediate(p);
         }
@@ -253,7 +260,9 @@ public class MapaGerador : MonoBehaviour
         // Player fica fora da combinação acima (ele se move, não pode ser "assado" junto com o mapa)
         if (posicaoPlayer.HasValue)
         {
-            PlayerInstanciado = Instantiate(player.prefab);
+            // personagem escolhido no menu; sem escolha, usa o prefab configurado no Inspector
+            PersonagemData escolhido = MenuInicial.PersonagemEscolhido;
+            PlayerInstanciado = Instantiate(escolhido != null && escolhido.prefab != null ? escolhido.prefab : player.prefab);
 
             // Desliga o CharacterController antes de teleportar e religa depois — mover o
             // Transform direto com o controller ligado deixa o estado interno dele (chão,
