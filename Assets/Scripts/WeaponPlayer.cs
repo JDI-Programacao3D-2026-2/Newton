@@ -1,28 +1,25 @@
 using System.Collections.Generic;
-using UnityEngine.UI;
 using UnityEngine;
 using UnityEngine.InputSystem;
-using UnityEngine.Serialization;
+using UnityEngine.UI;
 
 namespace Game.Combat
 {
-
-  
+    /// Arma do jogador: o clique esquerdo atira (pool de projéteis, munição e recarga com R).
+    /// Com 'Corpo A Corpo' ligado (Espadachim) o clique golpeia com a espada. Também mostra o placar (Tab).
     public class WeaponPlayer : MonoBehaviour
     {
-        [FormerlySerializedAs("weaponData")] [SerializeField] private WeaponData dadosArma;
-        [Tooltip("Ponto de saída do projétil (ponta do cano). Usado só como POSIÇÃO de spawn — a direção do tiro é o forward do Player.")]
-        [FormerlySerializedAs("muzzle")] [SerializeField] private Transform bocaDoCano;
+        [SerializeField] private WeaponData dadosArma;
+        [Tooltip("Ponto de saída do projétil (ponta do cano). Só a posição: a direção vem da mira.")]
+        [SerializeField] private Transform bocaDoCano;
+        [Tooltip("Projéteis criados já no início, pra não dar Instantiate no meio da partida")]
+        [SerializeField, Min(0)] private int tamanhoPool = 20;
 
         [Header("HUD (Canvas)")]
         [SerializeField] private Text textoMunicao;
         [Tooltip("Painel do placar, mostrado enquanto a tecla Tab está apertada")]
         [SerializeField] private GameObject painelFrags;
         [SerializeField] private Text textoFrags;
-
-        [Header("Pool de projéteis")]
-        [Tooltip("Projéteis criados já no início, pra não dar Instantiate no meio da partida")]
-        [SerializeField, Min(0)] private int tamanhoPool = 20;
 
         [Header("Corpo a corpo (Espadachim)")]
         [Tooltip("Liga: o clique esquerdo golpeia com a espada em vez de atirar")]
@@ -36,23 +33,20 @@ namespace Game.Combat
         [Tooltip("Tempo entre começar o golpe e o dano valer")]
         [SerializeField, Min(0f)] private float atrasoGolpe = 0.2f;
 
+        private const float AlcanceDaMira = 200f;
+
+        private readonly Queue<Projectile> _pool = new Queue<Projectile>();
+        private readonly RaycastHit[] _aimHits = new RaycastHit[16];
         private readonly Collider[] _golpeColliders = new Collider[32];
         private readonly HashSet<IDamageable> _golpeAlvos = new HashSet<IDamageable>();
 
-        private readonly Queue<Projectile> _pooledProjectiles = new Queue<Projectile>();
-        private float _nextFireTime;
+        private int _municao;
+        private bool _recarregando;
+        private float _fimDaRecarga;
+        private float _proximoTiro;
 
-        private int _currentAmmo;
-        private float _reloadEndTime;
-
-        public int CurrentAmmo => _currentAmmo;
-        public int MagazineSize => dadosArma != null ? dadosArma.MagazineSize : 0;
-        public bool IsReloading { get; private set; }
+        /// Usado pelas habilidades (a rajada precisa saber se este personagem atira).
         public bool CorpoACorpo => corpoACorpo;
-
-        public event System.Action<int, int> AmmoChanged;
-        public event System.Action<float> ReloadStarted;
-        public event System.Action ReloadFinished;
 
         private void Awake()
         {
@@ -65,17 +59,13 @@ namespace Game.Combat
                 return;
             }
 
-            _currentAmmo = dadosArma.MagazineSize;
+            _municao = dadosArma.MagazineSize;
 
             for (int i = 0; i < tamanhoPool; i++)
-                ReturnProjectileToPool(CreateProjectile());
+                Devolver(CriarProjetil());
         }
 
-        private void Start()
-        {
-            AmmoChanged?.Invoke(_currentAmmo, MagazineSize);
-            AtualizarTextoMunicao();
-        }
+        private void Start() => AtualizarTextoMunicao();
 
         private void Update()
         {
@@ -84,82 +74,140 @@ namespace Game.Combat
             // jogo pausado (confirmação de saída, vitória ou derrota): não atira nem recarrega
             if (Time.timeScale == 0f) return;
 
-            if (IsReloading && Time.time >= _reloadEndTime)
-                FinishReload();
+            if (_recarregando && Time.time >= _fimDaRecarga) TerminarRecarga();
 
-            if (Keyboard.current != null && Keyboard.current.rKey.wasPressedThisFrame)
-                StartReload();
-
-            if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
-                TryFire();
+            if (Keyboard.current.rKey.wasPressedThisFrame) IniciarRecarga();
+            if (Mouse.current.leftButton.wasPressedThisFrame) Atirar();
         }
 
-        // HUD: mira, munição e recarga
-        private void OnGUI()
-        {
-            if (dadosArma == null || Time.timeScale == 0f) return;
-
-            float cx = Screen.width * 0.5f;
-            float cy = Screen.height * 0.5f;
-            GUI.Box(new Rect(cx - 2f, cy - 2f, 4f, 4f), GUIContent.none);
-        }
+        // ---------- HUD ----------
 
         // Placar enquanto Tab está apertada
         private void AtualizarFrags()
         {
-            if (painelFrags == null) return;
-
-            bool ver = Keyboard.current != null && Keyboard.current.tabKey.isPressed;
+            bool ver = Keyboard.current.tabKey.isPressed;
             if (painelFrags.activeSelf != ver) painelFrags.SetActive(ver);
 
-            if (ver && textoFrags != null)
-                textoFrags.text = $"Abates: {EnemyController.Abates}\nRestantes: {EnemyController.Vivos}";
+            if (ver) textoFrags.text = $"Abates: {EnemyController.Abates}\nRestantes: {EnemyController.Vivos}";
         }
 
-        // HUD de munição no Canvas (o texto é atribuído no Inspector)
         private void AtualizarTextoMunicao()
         {
-            if (textoMunicao == null) return;
-
             if (corpoACorpo)
             {
                 textoMunicao.text = "Espada";
                 return;
             }
 
-            string texto = IsReloading ? "Recarregando..." : $"Munição: {_currentAmmo}/{dadosArma.MagazineSize}";
-            if (!IsReloading && _currentAmmo == 0) texto += "  (R)";
-
-            textoMunicao.text = texto;
-            textoMunicao.color = _currentAmmo == 0 ? Color.red : Color.white;
+            textoMunicao.text = _recarregando ? "Recarregando..." : $"Munição: {_municao}/{dadosArma.MagazineSize}" + (_municao == 0 ? "  (R)" : "");
+            textoMunicao.color = _municao == 0 ? Color.red : Color.white;
         }
 
-        public void StartReload()
-        {
-            if (corpoACorpo || IsReloading || _currentAmmo >= dadosArma.MagazineSize) return;
+        // ---------- Tiro ----------
 
-            IsReloading = true;
-            _reloadEndTime = Time.time + dadosArma.ReloadTime;
-            ReloadStarted?.Invoke(dadosArma.ReloadTime);
+        private void IniciarRecarga()
+        {
+            if (corpoACorpo || _recarregando || _municao >= dadosArma.MagazineSize) return;
+
+            _recarregando = true;
+            _fimDaRecarga = Time.time + dadosArma.ReloadTime;
             AtualizarTextoMunicao();
         }
 
-        private void FinishReload()
+        private void TerminarRecarga()
         {
-            IsReloading = false;
-            _currentAmmo = dadosArma.MagazineSize;
-            AmmoChanged?.Invoke(_currentAmmo, MagazineSize);
-            ReloadFinished?.Invoke();
+            _recarregando = false;
+            _municao = dadosArma.MagazineSize;
             AtualizarTextoMunicao();
         }
 
-        // Espada: a lâmina desce e, no meio do golpe, o dano vale pra quem estiver na frente
+        private void Atirar()
+        {
+            if (corpoACorpo)
+            {
+                Golpear();
+                return;
+            }
+
+            // pente vazio: não atira (a recarga é manual, tecla R)
+            if (_recarregando || _municao <= 0 || Time.time < _proximoTiro) return;
+
+            _municao--;
+            _proximoTiro = Time.time + dadosArma.FireInterval;
+            AtualizarTextoMunicao();
+
+            Disparar();
+        }
+
+        // Lança um projétil do pool agora, sem gastar munição nem respeitar intervalo (a rajada usa isso)
+        public void Disparar()
+        {
+            Vector3 direcao = DirecaoDaMira();
+            Projectile projetil = _pool.Count > 0 ? _pool.Dequeue() : CriarProjetil();
+
+            projetil.transform.SetPositionAndRotation(bocaDoCano.position, Quaternion.LookRotation(direcao));
+            projetil.gameObject.SetActive(true);
+            projetil.Launch(direcao, dadosArma.ProjectileSpeed, dadosArma.Damage, dadosArma.ProjectileLifetime, Devolver);
+        }
+
+        /// Ponto que o centro da tela acerta (até 'alcance'); sem nada na frente, o ponto mais longe no ar.
+        /// As habilidades (fumaça e bombardeio) usam a mesma mira.
+        public Vector3 PontoDaMira(float alcance)
+        {
+            Camera cam = Camera.main;
+            if (cam == null) return transform.position + transform.forward * alcance;
+
+            Ray raio = cam.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
+            Vector3 ponto = raio.GetPoint(alcance);
+            float maisPerto = alcance;
+
+            int count = Physics.RaycastNonAlloc(raio, _aimHits, alcance, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < count; i++)
+            {
+                if (_aimHits[i].transform.IsChildOf(transform) || _aimHits[i].distance >= maisPerto) continue;
+
+                maisPerto = _aimHits[i].distance;
+                ponto = _aimHits[i].point;
+            }
+
+            return ponto;
+        }
+
+        // Do cano até o ponto mirado
+        private Vector3 DirecaoDaMira()
+        {
+            Vector3 direcao = (PontoDaMira(AlcanceDaMira) - bocaDoCano.position).normalized;
+
+            // alvo atrás do cano: usa a frente do corpo
+            return Vector3.Dot(direcao, transform.forward) > 0.1f ? direcao : transform.forward;
+        }
+
+        // ---------- Pool ----------
+
+        private Projectile CriarProjetil()
+        {
+            Projectile novo = Instantiate(dadosArma.ProjectilePrefab);
+            novo.gameObject.SetActive(false);
+            return novo;
+        }
+
+        private void Devolver(Projectile projetil)
+        {
+            if (projetil == null) return;
+
+            projetil.gameObject.SetActive(false);
+            _pool.Enqueue(projetil);
+        }
+
+        // ---------- Espada ----------
+
+        // A lâmina desce e, no meio do golpe, o dano vale pra quem estiver na frente
         private void Golpear()
         {
-            if (Time.time < _nextFireTime) return;
+            if (Time.time < _proximoTiro) return;
 
-            _nextFireTime = Time.time + intervaloEspada;
-            if (animacaoEspada != null) animacaoEspada.Play();
+            _proximoTiro = Time.time + intervaloEspada;
+            animacaoEspada.Play();
             Invoke(nameof(AplicarGolpe), atrasoGolpe);
         }
 
@@ -171,101 +219,19 @@ namespace Game.Combat
             _golpeAlvos.Clear();
             for (int i = 0; i < count; i++)
             {
-                Collider alvoCollider = _golpeColliders[i];
-                if (alvoCollider.transform.IsChildOf(transform)) continue;
+                Collider colisor = _golpeColliders[i];
+                if (colisor.transform.IsChildOf(transform)) continue;
 
-                IDamageable alvo = alvoCollider.GetComponentInParent<IDamageable>();
+                IDamageable alvo = colisor.GetComponentInParent<IDamageable>();
                 if (alvo == null) continue;
 
                 // só quem está na frente (cone) e uma vez por golpe (o inimigo tem mais de um collider)
-                Vector3 direcao = alvoCollider.transform.position - transform.position;
+                Vector3 direcao = colisor.transform.position - transform.position;
                 direcao.y = 0f;
                 if (Vector3.Angle(transform.forward, direcao) > anguloEspada * 0.5f) continue;
 
-                if (_golpeAlvos.Add(alvo))
-                    alvo.TakeDamage(danoEspada);
+                if (_golpeAlvos.Add(alvo)) alvo.TakeDamage(danoEspada);
             }
-        }
-
-        public void TryFire()
-        {
-            if (corpoACorpo)
-            {
-                Golpear();
-                return;
-            }
-
-            if (IsReloading || Time.time < _nextFireTime) return;
-
-            // Pente vazio: não atira. A recarga é manual (tecla R).
-            if (_currentAmmo <= 0) return;
-
-            _currentAmmo--;
-            AmmoChanged?.Invoke(_currentAmmo, MagazineSize);
-            AtualizarTextoMunicao();
-            _nextFireTime = Time.time + dadosArma.FireInterval;
-
-            Disparar();
-        }
-
-        // Lança um projétil do pool agora, sem gastar munição nem respeitar intervalo (a rajada usa isso)
-        public void Disparar()
-        {
-            Vector3 direction = GetAimDirection();
-            Projectile projectile = GetPooledProjectile();
-            projectile.transform.SetPositionAndRotation(bocaDoCano.position, Quaternion.LookRotation(direction));
-            projectile.gameObject.SetActive(true);
-            projectile.Launch(direction, dadosArma.ProjectileSpeed, dadosArma.Damage, dadosArma.ProjectileLifetime, ReturnProjectileToPool);
-        }
-
-        private readonly RaycastHit[] _aimHits = new RaycastHit[16];
-
-       
-        private Vector3 GetAimDirection()
-        {
-            Camera cam = Camera.main;
-            if (cam == null) return transform.forward;
-
-            Ray ray = cam.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
-            Vector3 target = ray.GetPoint(AimMaxDistance);
-            float nearest = AimMaxDistance;
-
-            int count = Physics.RaycastNonAlloc(ray, _aimHits, AimMaxDistance, Physics.DefaultRaycastLayers,
-                QueryTriggerInteraction.Ignore);
-            for (int i = 0; i < count; i++)
-            {
-                if (_aimHits[i].transform.IsChildOf(transform)) continue;
-                if (_aimHits[i].distance < nearest)
-                {
-                    nearest = _aimHits[i].distance;
-                    target = _aimHits[i].point;
-                }
-            }
-
-            Vector3 direction = (target - bocaDoCano.position).normalized;
-
-            // alvo atrás do cano: usa a frente do corpo
-            return Vector3.Dot(direction, transform.forward) > 0.1f ? direction : transform.forward;
-        }
-
-        private const float AimMaxDistance = 200f;
-
-        private Projectile GetPooledProjectile() =>
-            _pooledProjectiles.Count > 0 ? _pooledProjectiles.Dequeue() : CreateProjectile();
-
-        private Projectile CreateProjectile()
-        {
-            Projectile instance = Instantiate(dadosArma.ProjectilePrefab);
-            instance.gameObject.SetActive(false);
-            return instance;
-        }
-
-        private void ReturnProjectileToPool(Projectile projectile)
-        {
-            if (projectile == null) return;
-
-            projectile.gameObject.SetActive(false);
-            _pooledProjectiles.Enqueue(projectile);
         }
     }
 }

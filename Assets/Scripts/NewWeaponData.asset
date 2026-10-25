@@ -12,11 +12,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4e60dbd1b18c5aa43a51d2aee7055cbe, type: 3}
   m_Name: NewWeaponData
   m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.WeaponData
-  fireRate: 5
-  damage: 10
-  magazineSize: 30
-  reloadTime: 1.5
-  projectilePrefab: {fileID: 2047451592793971541, guid: 813dc78bceac7f24a95f331aae538f03, type: 3}
-  projectileSpeed: 60
-  projectileLifetime: 4
-  poolPrewarmCount: 20
+  cadenciaTiro: 5
+  dano: 10
+  prefabProjetil: {fileID: 2047451592793971541, guid: 813dc78bceac7f24a95f331aae538f03, type: 3}
+  velocidadeProjetil: 60
+  tempoVidaProjetil: 4
+  tamanhoPente: 20
+  tempoRecarga: 1.5

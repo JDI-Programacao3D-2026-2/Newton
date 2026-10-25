@@ -1898,7 +1898,7 @@ GameObject:
   - component: {fileID: 1320355629}
   - component: {fileID: 1320355628}
   m_Layer: 5
-  m_Name: Bombardeiro
+  m_Name: Granadeiro
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1963,7 +1963,7 @@ MonoBehaviour:
     m_PressedTrigger: Pressed
     m_SelectedTrigger: Selected
     m_DisabledTrigger: Disabled
-  m_Interactable: 0
+  m_Interactable: 1
   m_TargetGraphic: {fileID: 1320355629}
   m_OnClick:
     m_PersistentCalls:
@@ -2221,9 +2221,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 0
     m_LineSpacing: 1
-  m_Text: 'Bombardeiro
-
-    (em breve)'
+  m_Text: Granadeiro
 --- !u!222 &1459059294
 CanvasRenderer:
   m_ObjectHideFlags: 0

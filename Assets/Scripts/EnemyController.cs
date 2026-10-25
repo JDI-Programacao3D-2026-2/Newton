@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.AI;
-using UnityEngine.Serialization;
 
 namespace Game.Combat
 {
@@ -12,17 +11,17 @@ namespace Game.Combat
     public class EnemyController : MonoBehaviour, IDamageable
     {
         [Header("Vida")]
-        [FormerlySerializedAs("maxHealth")] [SerializeField, Min(1f)] private float vidaMaxima = 50f;
+        [SerializeField, Min(1f)] private float vidaMaxima = 50f;
 
         [Header("Disparo")]
-        [FormerlySerializedAs("projectilePrefab")] [SerializeField] private Projectile prefabProjetil;
+        [SerializeField] private Projectile prefabProjetil;
         [Tooltip("Ponto de saída do projétil")]
-        [FormerlySerializedAs("muzzle")] [SerializeField] private Transform bocaDoCano;
-        [FormerlySerializedAs("attackRange")] [SerializeField, Min(0f)] private float alcanceAtaque = 10f;
-        [FormerlySerializedAs("damage")] [SerializeField, Min(0f)] private float dano = 10f;
-        [FormerlySerializedAs("projectileSpeed")] [SerializeField, Min(0.01f)] private float velocidadeProjetil = 30f;
-        [FormerlySerializedAs("projectileLifetime")] [SerializeField, Min(0.01f)] private float tempoVidaProjetil = 4f;
-        [FormerlySerializedAs("attackCooldown")] [SerializeField, Min(0.01f)] private float intervaloAtaque = 1.5f;
+        [SerializeField] private Transform bocaDoCano;
+        [SerializeField, Min(0f)] private float alcanceAtaque = 10f;
+        [SerializeField, Min(0f)] private float dano = 10f;
+        [SerializeField, Min(0.01f)] private float velocidadeProjetil = 30f;
+        [SerializeField, Min(0.01f)] private float tempoVidaProjetil = 4f;
+        [SerializeField, Min(0.01f)] private float intervaloAtaque = 1.5f;
 
         [Header("Corpo a corpo")]
         [Tooltip("Ataca de perto com a espada, sem projétil. O alcance é o 'Alcance Ataque' acima.")]
@@ -44,54 +43,14 @@ namespace Game.Combat
         [Tooltip("Dentro desse raio ele percebe o jogador mesmo fora do cone")]
         [SerializeField, Min(0f)] private float raioPercepcao = 3f;
 
-        private const string PlayerTag = "Player";
-
         private Transform jogador; // o Player da cena, achado pela tag
 
-        // inimigos vivos e derrotados, pra detectar a vitória
+        // inimigos vivos e derrotados (placar do Tab e vitória do tutorial)
         private static int _alive;
         private static int _killed;
-        private bool _counted;
-
-        // todos os inimigos foram derrotados
-        public static bool AllDefeated => _alive == 0 && _killed > 0;
-
-        // placar (tecla Tab)
         public static int Abates => _killed;
         public static int Vivos => _alive;
-
-        public bool CorpoACorpo => corpoACorpo;
-
-        // atordoado: não anda, não ataca (o FSM e o disparo conferem isso)
-        private float _atordoadoAte;
-        private Renderer _corpo;
-        private MaterialPropertyBlock _tinta;
-        public bool Atordoado => Time.time < _atordoadoAte;
-
-        public void Atordoar(float segundos)
-        {
-            if (IsDead) return;
-
-            _atordoadoAte = Mathf.Max(_atordoadoAte, Time.time + segundos);
-            _agent.isStopped = true;
-
-            // fica amarelo enquanto dura
-            _corpo ??= GetComponent<Renderer>();
-            if (_corpo != null)
-            {
-                _tinta ??= new MaterialPropertyBlock();
-                _tinta.SetColor("_BaseColor", new Color(1f, 0.9f, 0.1f));
-                _corpo.SetPropertyBlock(_tinta);
-            }
-
-            CancelInvoke(nameof(FimAtordoamento));
-            Invoke(nameof(FimAtordoamento), _atordoadoAte - Time.time);
-        }
-
-        private void FimAtordoamento()
-        {
-            if (_corpo != null) _corpo.SetPropertyBlock(null);
-        }
+        public static bool AllDefeated => _alive == 0 && _killed > 0;
 
         private NavMeshAgent _agent;
         private readonly Queue<Projectile> _pooledProjectiles = new Queue<Projectile>();
@@ -99,8 +58,21 @@ namespace Game.Combat
         private float _currentHealth;
         private float _nextAttackTime;
 
+        // atordoado: não anda, não ataca (o FSM e o disparo conferem isso)
+        private float _atordoadoAte;
+        private Renderer _corpo;
+        private MaterialPropertyBlock _tinta;
+
         /// Disparado quando o inimigo leva dano (o FSM usa pra investigar de onde veio o tiro).
         public event System.Action Damaged;
+
+        public bool CorpoACorpo => corpoACorpo;
+        public bool Atordoado => Time.time < _atordoadoAte;
+        public bool IsDead => _currentHealth <= 0f;
+        public float VidaFracao => _currentHealth / vidaMaxima;
+
+        // O ataque nunca passa da distância de visão
+        public float AlcanceEfetivo => Mathf.Min(alcanceAtaque, distanciaVisao);
 
         // Se o jogador ainda não existia (ou foi destruído e recriado), procura de novo pela tag
         public Transform Jogador
@@ -111,71 +83,81 @@ namespace Game.Combat
                 return jogador;
             }
         }
-        public bool IsDead => _currentHealth <= 0f;
-        public float VidaFracao => _currentHealth / vidaMaxima;
-
-        // O ataque nunca passa da distância de visão
-        public float AlcanceEfetivo => Mathf.Min(alcanceAtaque, distanciaVisao);
 
         private void Awake()
         {
             if (_alive == 0) _killed = 0; // fase nova: zera a contagem
             _alive++;
-            _counted = true;
 
             _agent = GetComponent<NavMeshAgent>();
+            _currentHealth = vidaMaxima;
 
             // Kinematic: o NavMeshAgent move o inimigo, a física não deve empurrá-lo
             if (TryGetComponent(out Rigidbody body))
                 body.isKinematic = true;
-            _currentHealth = vidaMaxima;
 
-            jogador = FindPlayerByTag();
+            if (corpoACorpo) return; // a espada não usa projétil
 
-            if (jogador == null)
-                Debug.LogWarning($"{nameof(EnemyController)}: nenhum objeto com a tag \"Player\" na cena ('{name}').", this);
-
-            if (!corpoACorpo && (prefabProjetil == null || bocaDoCano == null))
+            if (prefabProjetil == null || bocaDoCano == null)
             {
                 Debug.LogError($"{nameof(EnemyController)}: Projectile Prefab ou Muzzle não atribuídos em '{name}'.", this);
                 enabled = false;
-            }
-            else if (!corpoACorpo)
-            {
-                for (int i = 0; i < tamanhoPool; i++)
-                    ReturnProjectileToPool(CreateProjectile());
+                return;
             }
 
-            // Prefab antigo sem o FSM: adiciona
-            if (!TryGetComponent<EnemyFSM>(out _))
-                gameObject.AddComponent<EnemyFSM>();
+            for (int i = 0; i < tamanhoPool; i++)
+                ReturnProjectileToPool(CreateProjectile());
         }
 
         private static Transform FindPlayerByTag()
         {
-            try
-            {
-                GameObject found = GameObject.FindGameObjectWithTag(PlayerTag);
-                return found != null ? found.transform : null;
-            }
-            catch (UnityException)
-            {
-                return null; // tag inexistente
-            }
+            GameObject found = GameObject.FindGameObjectWithTag("Player");
+            return found != null ? found.transform : null;
         }
 
         private void OnDestroy()
         {
-            if (_counted)
-            {
-                _counted = false;
-                _alive--;
-            }
+            _alive--;
 
             // os projéteis do pool não são filhos do inimigo: limpa pra não ficarem soltos na cena
             foreach (Projectile projectile in _pooledProjectiles)
                 if (projectile != null) Destroy(projectile.gameObject);
-            _pooledProjectiles.Clear();
+        }
+
+        public void Atordoar(float segundos)
+        {
+            if (IsDead) return;
+
+            _atordoadoAte = Mathf.Max(_atordoadoAte, Time.time + segundos);
+            _agent.isStopped = true;
+
+            Pintar(new Color(1f, 0.9f, 0.1f)); // fica amarelo enquanto dura
+
+            CancelInvoke(nameof(RestaurarCor));
+            Invoke(nameof(RestaurarCor), _atordoadoAte - Time.time);
+        }
+
+        // Troca a cor do corpo sem mexer no material (cada inimigo tem a sua)
+        private void Pintar(Color cor)
+        {
+            _corpo ??= GetComponent<Renderer>();
+            _tinta ??= new MaterialPropertyBlock();
+            _tinta.SetColor("_BaseColor", cor);
+            _corpo.SetPropertyBlock(_tinta);
+        }
+
+        // Volta à cor normal; atordoado, volta ao amarelo e só restaura quando o stun acabar
+        private void RestaurarCor()
+        {
+            if (!Atordoado)
+            {
+                _corpo.SetPropertyBlock(null);
+                return;
+            }
+
+            Pintar(new Color(1f, 0.9f, 0.1f));
+            CancelInvoke(nameof(RestaurarCor));
+            Invoke(nameof(RestaurarCor), _atordoadoAte - Time.time);
         }
 
         public void Curar(float quantidade)
@@ -189,6 +171,11 @@ namespace Game.Combat
 
             _currentHealth = Mathf.Max(0f, _currentHealth - amount);
             Damaged?.Invoke();
+
+            // pisca em branco um instante: o jogador vê que acertou
+            Pintar(Color.white);
+            CancelInvoke(nameof(RestaurarCor));
+            Invoke(nameof(RestaurarCor), 0.1f);
 
             if (_currentHealth <= 0f)
                 Die();
@@ -204,6 +191,9 @@ namespace Game.Combat
         // Vê o jogador se ele está no alcance, dentro do cone (ou muito perto) e sem parede no caminho
         public bool CanSeePlayer()
         {
+            // fumaça entre o inimigo e o jogador (ou em cima de um dos dois): ninguém enxerga
+            if (Habilidades.BloqueiaVisao(transform.position, jogador.position)) return false;
+
             Vector3 toPlayer = jogador.position - transform.position;
             if (toPlayer.sqrMagnitude > distanciaVisao * distanciaVisao) return false;
 
@@ -220,6 +210,8 @@ namespace Game.Combat
         public bool HasLineOfSightToPlayer()
         {
             Vector3 origin = bocaDoCano.position;
+            if (Habilidades.BloqueiaVisao(origin, jogador.position)) return false;
+
             Vector3 offset = jogador.position - origin;
             int count = Physics.SphereCastNonAlloc(origin, 0.2f, offset.normalized, _sightHits, offset.magnitude,
                 Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);

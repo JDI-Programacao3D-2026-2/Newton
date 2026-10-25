@@ -28,6 +28,9 @@ namespace Game.Combat
         [SerializeField, Min(0.5f)] private float tempoMinNaPosicao = 1.5f;
         [SerializeField, Min(0.5f)] private float tempoMaxNaPosicao = 3.5f;
 
+        [Tooltip("Sem linha de tiro por esse tempo (jogador atrás de um muro), o atirador avança pra achar um ângulo")]
+        [SerializeField, Min(0.5f)] private float tempoParaAvancar = 2f;
+
         [Header("Memória")]
         [Tooltip("Segundos indo ao último lugar onde viu o jogador antes de patrulhar")]
         [SerializeField, Min(0f)] private float tempoMemoria = 5f;
@@ -35,6 +38,12 @@ namespace Game.Combat
         [Header("Alerta")]
         [Tooltip("Ao ver o jogador ou levar dano, chama os amigos que estão patrulhando dentro deste raio")]
         [SerializeField, Min(0f)] private float raioAlerta = 20f;
+        [Tooltip("Quantas vezes o chamado passa de um inimigo pro outro (amigos dos amigos)")]
+        [SerializeField, Min(0)] private int saltosDoAlerta = 2;
+
+        [Header("Defesa de zona")]
+        [Tooltip("Raio em volta da zona onde o defensor patrulha")]
+        [SerializeField, Min(1f)] private float raioDefesaZona = 10f;
 
         [Header("Patrulha")]
         [SerializeField, Min(1f)] private float raioPatrulha = 15f;
@@ -67,6 +76,13 @@ namespace Game.Combat
         private EnemyController _ctrl;
         private NavMeshAgent _agent;
         private bool _estavaAtordoado;
+        private float _proximoChamado;
+
+        // zona que ele recebeu pra defender (continua guardada mesmo depois de capturada, pra ele se enfurecer)
+        private ZonaCaptura _zona;
+
+        /// Zona de captura que este inimigo defende (nula = patrulha livre, ou a zona já foi capturada)
+        public ZonaCaptura ZonaDefendida => _zona != null && !_zona.Capturada ? _zona : null;
 
         // memória do jogador
         private Vector3 _lastKnownPlayerPos;
@@ -87,6 +103,7 @@ namespace Game.Combat
         private float _nextCoverRepathTime;
         private float _nextValidateTime;
         private float _blockedSince = -1f;
+        private float _semLinhaDeTiroDesde = -1f;
         private bool _hasCoverSpot;
         private Vector3 _coverSpot;
         private Vector3 _lastCoverSpot = new Vector3(float.MaxValue, 0f, 0f);
@@ -175,6 +192,7 @@ namespace Game.Combat
             {
                 _lostSightSince = -1f;
                 _nextCoverRepathTime = 0f; // escolhe posição no próximo frame
+                _semLinhaDeTiroDesde = -1f;
                 _hasCoverSpot = false;
                 _blockedSince = -1f;
             }
@@ -183,37 +201,53 @@ namespace Game.Combat
                 _nextHidePathTime = 0f; // escolhe esconderijo no próximo frame
         }
 
-        // levou tiro: vai investigar
+        // levou tiro: vai investigar e pede ajuda (em qualquer estado, mas no máximo a cada 3 s)
         private void OnDamaged()
         {
             if (Jogador == null) return;
 
             NotePlayerSeen();
-            if (estadoAtual == EnemyState.Patrol)
+            if (estadoAtual == EnemyState.Patrol) ChangeState(EnemyState.Pursuit);
+
+            if (Time.time >= _proximoChamado)
             {
-                ChamarAmigos();
-                ChangeState(EnemyState.Pursuit);
+                _proximoChamado = Time.time + 3f;
+                ChamarAmigos(Jogador.position, 0);
             }
         }
 
-        // Avisa os amigos que patrulham por perto: eles vão até onde o jogador está
-        private void ChamarAmigos()
+        // Chama os amigos que patrulham dentro do raio de alerta: eles vão até onde o jogador está.
+        // O chamado passa de vizinho em vizinho (amigos dos amigos) até 'saltosDoAlerta' vezes.
+        private void ChamarAmigos(Vector3 posicaoDoJogador, int salto)
         {
-            foreach (EnemyFSM amigo in Ativos)
+            foreach (EnemyFSM amigo in Ativos.ToArray())
             {
                 if (amigo == this || amigo._ctrl.IsDead || amigo.estadoAtual != EnemyState.Patrol) continue;
                 if ((amigo.transform.position - transform.position).sqrMagnitude > raioAlerta * raioAlerta) continue;
 
-                amigo.ReceberAlerta(Jogador.position);
+                amigo.ReceberAlerta(posicaoDoJogador, salto + 1);
             }
         }
 
-        private void ReceberAlerta(Vector3 posicaoDoJogador)
+        public void ReceberAlerta(Vector3 posicaoDoJogador, int salto = 0)
         {
             _lastKnownPlayerPos = posicaoDoJogador;
             _lastSeenTime = Time.time;
             _hasLastKnown = true;
             ChangeState(EnemyState.Pursuit);
+
+            // quem foi chamado também chama os vizinhos dele
+            if (salto < saltosDoAlerta) ChamarAmigos(posicaoDoJogador, salto);
+        }
+
+        // ---------- Defesa de zona ----------
+
+        // Passa a patrulhar em volta dessa zona (em vez de em volta de onde nasceu)
+        public void DefenderZona(ZonaCaptura zona)
+        {
+            _zona = zona;
+            _patrolHasDestination = false; // escolhe um ponto novo, perto da zona, já na próxima patrulha
+            _nextPatrolTime = 0f;
         }
 
         private void NotePlayerSeen()
@@ -237,8 +271,16 @@ namespace Game.Combat
             if (_ctrl.CanSeePlayer())
             {
                 NotePlayerSeen();
-                ChamarAmigos();
+                ChamarAmigos(Jogador.position, 0);
                 ChangeState(EnemyState.Pursuit);
+                return;
+            }
+
+            // a zona que ele defendia foi capturada: vai atrás do jogador
+            if (_zona != null && _zona.Capturada)
+            {
+                _zona = null;
+                ReceberAlerta(Jogador.position);
                 return;
             }
 
@@ -269,10 +311,15 @@ namespace Game.Combat
         {
             _patrolPath ??= new NavMeshPath();
 
+            // defensor de zona patrulha em volta da zona; os outros, em volta de onde estão
+            bool defendendo = ZonaDefendida != null;
+            Vector3 centro = defendendo ? ZonaDefendida.transform.position : transform.position;
+            float raio = defendendo ? raioDefesaZona : raioPatrulha;
+
             for (int i = 0; i < 8; i++)
             {
-                Vector2 c = Random.insideUnitCircle * raioPatrulha;
-                Vector3 candidato = transform.position + new Vector3(c.x, 0f, c.y);
+                Vector2 c = Random.insideUnitCircle * raio;
+                Vector3 candidato = centro + new Vector3(c.x, 0f, c.y);
 
                 if (!NavMesh.SamplePosition(candidato, out NavMeshHit hit, 3f, NavMesh.AllAreas)) continue;
                 if (!_agent.CalculatePath(hit.position, _patrolPath) || _patrolPath.status != NavMeshPathStatus.PathComplete) continue;
@@ -383,6 +430,25 @@ namespace Game.Combat
                 if (Time.time - _lostSightSince > 2.5f)
                 {
                     ChangeState(EnemyState.Pursuit);
+                    return;
+                }
+            }
+
+            // Jogador atrás de um muro (sem linha de tiro por um tempo): avança até achar um ângulo,
+            // em vez de ficar só trocando de cobertura sem atirar
+            if (_ctrl.HasLineOfSightToPlayer())
+            {
+                _semLinhaDeTiroDesde = -1f;
+            }
+            else
+            {
+                if (_semLinhaDeTiroDesde < 0f) _semLinhaDeTiroDesde = Time.time;
+
+                if (Time.time - _semLinhaDeTiroDesde > tempoParaAvancar)
+                {
+                    _agent.isStopped = false;
+                    _agent.SetDestination(Jogador.position);
+                    FacePlayer();
                     return;
                 }
             }
@@ -605,6 +671,13 @@ namespace Game.Combat
             }
 
             return false;
+        }
+
+        // Na Scene (inimigo selecionado): círculo laranja = raio do chamado de ajuda
+        private void OnDrawGizmosSelected()
+        {
+            Gizmos.color = new Color(1f, 0.5f, 0f);
+            Gizmos.DrawWireSphere(transform.position, raioAlerta);
         }
     }
 }

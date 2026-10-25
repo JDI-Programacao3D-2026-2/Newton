@@ -53,25 +53,18 @@ public class MenuInicial : MonoBehaviour
 
     public void EscolherPersonagem(int indice)
     {
-        PersonagemData escolhido = indice >= 0 && indice < personagens.Length ? personagens[indice] : null;
-        if (escolhido == null || escolhido.prefab == null)
+        if (personagens[indice].prefab == null)
         {
             Debug.LogWarning("MenuInicial: personagem sem prefab, ainda não disponível.");
             return;
         }
 
-        PersonagemEscolhido = escolhido;
+        PersonagemEscolhido = personagens[indice];
         MostrarPainel(painelMapa);
     }
 
     public void EscolherMapa(int indice)
     {
-        if (indice < 0 || indice >= mapas.Length || mapas[indice] == null)
-        {
-            Debug.LogWarning("MenuInicial: mapa não configurado.");
-            return;
-        }
-
         MapaEscolhido = mapas[indice];
         Tutorial = false;
         SceneManager.LoadScene(nomeCenaJogo);

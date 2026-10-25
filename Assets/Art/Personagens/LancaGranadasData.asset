@@ -1,0 +1,21 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4e60dbd1b18c5aa43a51d2aee7055cbe, type: 3}
+  m_Name: LancaGranadasData
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.WeaponData
+  cadenciaTiro: 1.2
+  dano: 40
+  prefabProjetil: {fileID: 3765978251976018075, guid: 75bd5ec87649f7a46b4012386d31cb66, type: 3}
+  velocidadeProjetil: 28
+  tempoVidaProjetil: 2.5
+  tamanhoPente: 8
+  tempoRecarga: 2.2

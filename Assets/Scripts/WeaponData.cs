@@ -1,5 +1,4 @@
 using UnityEngine;
-using UnityEngine.Serialization;
 
 namespace Game.Combat
 {
@@ -8,12 +7,12 @@ namespace Game.Combat
     public class WeaponData : ScriptableObject
     {
         [Tooltip("Tiros por segundo.")]
-        [FormerlySerializedAs("fireRate")] [SerializeField, Min(0.01f)] private float cadenciaTiro = 5f;
-        [FormerlySerializedAs("damage")] [SerializeField, Min(0f)] private float dano = 10f;
+        [SerializeField, Min(0.01f)] private float cadenciaTiro = 5f;
+        [SerializeField, Min(0f)] private float dano = 10f;
 
-        [FormerlySerializedAs("projectilePrefab")] [SerializeField] private Projectile prefabProjetil;
-        [FormerlySerializedAs("projectileSpeed")] [SerializeField, Min(0.01f)] private float velocidadeProjetil = 60f;
-        [FormerlySerializedAs("projectileLifetime")] [SerializeField, Min(0.01f)] private float tempoVidaProjetil = 4f;
+        [SerializeField] private Projectile prefabProjetil;
+        [SerializeField, Min(0.01f)] private float velocidadeProjetil = 60f;
+        [SerializeField, Min(0.01f)] private float tempoVidaProjetil = 4f;
 
         [Tooltip("Balas por pente. Ao zerar (ou apertar R) é preciso recarregar.")]
         [SerializeField, Min(1)] private int tamanhoPente = 8;
