@@ -1,6 +1,6 @@
 using UnityEngine;
 
-// Um asset por personagem jogável (botão direito > Create > Personagens > Personagem).
+// um asset por personagem jogável (botão direito > Create > Personagens > Personagem)
 [CreateAssetMenu(fileName = "NovoPersonagem", menuName = "Personagens/Personagem")]
 public class PersonagemData : ScriptableObject
 {

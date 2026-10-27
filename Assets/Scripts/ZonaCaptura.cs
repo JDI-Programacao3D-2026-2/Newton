@@ -3,8 +3,8 @@ using UnityEngine;
 
 namespace Game.Combat
 {
-    /// Zona de captura: ficar dentro do círculo enche a barra; ao chegar em 100% a zona é capturada.
-    /// Capturadas todas as zonas do mapa, o jogador vence (quem confere isso é o PlayerMove).
+    // zona de captura: ficar dentro do círculo enche a barra e quando chega em 100% a zona é capturada.
+    // capturou todas as zonas do mapa, o player vence (quem confere isso é o PlayerMove)
     public class ZonaCaptura : MonoBehaviour
     {
         [SerializeField, Min(1f)] private float raio = 5f;
@@ -12,6 +12,8 @@ namespace Game.Combat
         [SerializeField, Min(1f)] private float tempoCaptura = 8f;
         [Tooltip("Disco colorido: vermelho (vazia) até verde (capturada)")]
         [SerializeField] private Renderer disco;
+        [Tooltip("Flare de partículas: fumaça vermelha enquanto a zona não é do jogador, verde depois de capturada")]
+        [SerializeField] private Transform flare;
 
         // placar de todas as zonas do mapa
         public static int Total { get; private set; }
@@ -22,7 +24,7 @@ namespace Game.Combat
         public static readonly List<ZonaCaptura> Ativas = new List<ZonaCaptura>();
         public bool Capturada => _capturada;
 
-        // progresso da zona onde o jogador está agora (-1 se ele não está em nenhuma)
+        // progresso da zona onde o player tá agora (-1 se não tá em nenhuma)
         public static float ProgressoAtual => Time.frameCount - _frameDentro <= 1 ? _progressoDentro : -1f;
         private static int _frameDentro = -10;
         private static float _progressoDentro;
@@ -36,6 +38,7 @@ namespace Game.Combat
         {
             Total++;
             Ativas.Add(this);
+            PintarFlare(false);
         }
 
         private void OnDestroy()
@@ -69,7 +72,7 @@ namespace Game.Combat
             }
             else
             {
-                // fora da zona o progresso escorre devagar
+                // fora da zona o progresso vai caindo devagar
                 _progresso -= Time.deltaTime / tempoCaptura * 0.5f;
             }
 
@@ -80,7 +83,26 @@ namespace Game.Combat
             {
                 _capturada = true;
                 Capturadas++;
+                PintarFlare(true);
             }
+        }
+
+        // a fumaça vermelha que já saiu some aos poucos e a nova já sai verde
+        private void PintarFlare(bool capturada)
+        {
+            if (flare == null) return;
+
+            Color fumaca = capturada ? new Color(0.15f, 0.9f, 0.25f, 0.85f) : new Color(0.95f, 0.12f, 0.08f, 0.85f);
+            Color brilho = capturada ? new Color(0.5f, 1f, 0.4f, 1f) : new Color(1f, 0.35f, 0.15f, 1f);
+
+            foreach (ParticleSystem sistema in flare.GetComponentsInChildren<ParticleSystem>())
+            {
+                ParticleSystem.MainModule principal = sistema.main;
+                principal.startColor = sistema.name == "Brilho" ? brilho : fumaca;
+            }
+
+            Light luz = flare.GetComponentInChildren<Light>();
+            if (luz != null) luz.color = capturada ? Color.green : Color.red;
         }
 
         private void Pintar()

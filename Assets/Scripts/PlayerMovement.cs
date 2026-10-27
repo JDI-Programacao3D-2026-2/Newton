@@ -4,7 +4,7 @@ using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
-/// Jogador: movimento (WASD, pulo, dash), vida e as telas de sair, vitória e derrota.
+// player: movimento (WASD, pulo, dash), vida e as telas de sair, vitória e derrota
 public class PlayerMove : MonoBehaviour, IDamageable
 {
     [Header("Movimento")]
@@ -88,8 +88,6 @@ public class PlayerMove : MonoBehaviour, IDamageable
         dashPressed = false;
     }
 
-    // ---------- Vida ----------
-
     public void TakeDamage(float amount)
     {
         if (_vida <= 0f) return;
@@ -106,7 +104,7 @@ public class PlayerMove : MonoBehaviour, IDamageable
         textoVida.text = Mathf.CeilToInt(_vida).ToString();
     }
 
-    // "ZONAS 1/3" no topo da tela, com a porcentagem enquanto o jogador captura uma zona
+    // "ZONAS 1/3" no topo da tela, com a porcentagem enquanto o player captura uma zona
     private void AtualizarHudZonas()
     {
         string texto = "";
@@ -124,15 +122,13 @@ public class PlayerMove : MonoBehaviour, IDamageable
         textoZonas.text = texto;
     }
 
-    // ---------- Telas: sair, vitória e derrota ----------
-
-    // Com zonas no mapa vence quem captura todas; sem zonas (tutorial) vence quem derrota todos os inimigos
+    // com zona no mapa vence quem captura todas. sem zona (tutorial) vence quem derrota todos os inimigos
     private static bool Venceu()
     {
         return ZonaCaptura.Total > 0 ? ZonaCaptura.TodasCapturadas : EnemyController.AllDefeated;
     }
 
-    // Sair do jogo pergunta antes (Esc, depois ENTER confirma). Vitória e derrota oferecem jogar de novo ou menu.
+    // sair do jogo pergunta antes (Esc, depois ENTER confirma). vitória e derrota oferecem jogar de novo ou voltar pro menu
     private void AtualizarTela()
     {
         Keyboard teclado = Keyboard.current;
@@ -151,7 +147,7 @@ public class PlayerMove : MonoBehaviour, IDamageable
                 else if (esc) Continuar();
                 break;
 
-            default: // Venceu ou Perdeu
+            default: // venceu ou perdeu
                 if (enter) Carregar(SceneManager.GetActiveScene().name);
                 else if (esc) Carregar(nomeCenaMenu);
                 break;
@@ -161,7 +157,7 @@ public class PlayerMove : MonoBehaviour, IDamageable
     private void MostrarTela(Tela tela, string texto)
     {
         _tela = tela;
-        Time.timeScale = 0f; // congela o jogo enquanto a tela está aberta
+        Time.timeScale = 0f; // congela o jogo enquanto a tela tá aberta
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
 
@@ -185,8 +181,6 @@ public class PlayerMove : MonoBehaviour, IDamageable
         SceneManager.LoadScene(cena);
     }
 
-    // ---------- Movimento ----------
-
     private void LerTeclas()
     {
         Keyboard teclado = Keyboard.current;
@@ -200,7 +194,7 @@ public class PlayerMove : MonoBehaviour, IDamageable
         dashPressed |= teclado.leftShiftKey.wasPressedThisFrame;
     }
 
-    // Direção do movimento no plano, relativa à câmera
+    // direção do movimento no plano, relativa à câmera
     private Vector3 DirecaoDaCamera()
     {
         Vector3 frente = transformCamera.forward;

@@ -5,18 +5,14 @@ using UnityEngine;
 
 namespace Game.Combat
 {
-
-   /// Contrato para qualquer alvo que possa receber dano de um Projectile.
-
+    // qualquer coisa que pode levar dano de um Projectile
     public interface IDamageable
     {
         void TakeDamage(float amount);
     }
 
-
-    /// Projétil físico (Rigidbody) reaproveitável pelo pool do WeaponPlayer. A arma chama Launch()
-    /// logo após reativar a instância; o próprio projétil pede pra ser devolvido ao expirar ou acertar algo.
-
+    // projétil com Rigidbody que o pool do WeaponPlayer reaproveita. a arma chama Launch() depois de ligar a instância,
+    // e o próprio projétil pede pra voltar pro pool quando expira ou acerta algo
     [RequireComponent(typeof(Rigidbody))]
     [RequireComponent(typeof(Collider))]
     public class Projectile : MonoBehaviour
@@ -51,9 +47,9 @@ namespace Game.Combat
             _lifetime = lifetime;
             _elapsedTime = 0f;
             _explodindo = false;
-            _releaseToPool = releaseToPool ?? throw new ArgumentNullException(nameof(releaseToPool));
+            _releaseToPool = releaseToPool;
 
-            // volta ao estado normal (pode ter explodido no uso anterior)
+            // volta ao normal (pode ter explodido no uso anterior)
             if (_corpo != null) _corpo.enabled = true;
             if (visualExplosao != null) visualExplosao.gameObject.SetActive(false);
 
@@ -89,7 +85,7 @@ namespace Game.Combat
             Release();
         }
 
-        // Dano em área (fogo amigo: machuca o próprio jogador também) e a explosão em partículas
+        // dano em área (fogo amigo: machuca o próprio player também) e a explosão em partículas
         private IEnumerator Explodir()
         {
             _explodindo = true;

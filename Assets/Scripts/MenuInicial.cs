@@ -1,14 +1,15 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-// Menu inicial: Principal -> Personagem -> Mapa -> jogo. Cada etapa é um painel do Canvas.
-// A escolha fica em campos estáticos, que o MapaGerador lê ao gerar a fase.
+// menu inicial: principal -> personagem -> mapa -> jogo. cada etapa é um painel do Canvas
+// a escolha fica em campos estáticos, que o MapaGerador lê quando gera a fase
 public class MenuInicial : MonoBehaviour
 {
     [Header("Painéis")]
     [SerializeField] private GameObject painelPrincipal;
     [SerializeField] private GameObject painelPersonagem;
     [SerializeField] private GameObject painelMapa;
+    [SerializeField] private GameObject painelControles;
 
     [Header("Opções")]
     [SerializeField] private PersonagemData[] personagens;
@@ -20,14 +21,14 @@ public class MenuInicial : MonoBehaviour
     [Header("Cena")]
     [SerializeField] private string nomeCenaJogo = "SampleScene";
 
-    // Escolhas da sessão atual (nulo = o MapaGerador usa o que está configurado nele)
+    // escolhas dessa sessão (nulo = o MapaGerador usa o que tá configurado nele)
     public static PersonagemData PersonagemEscolhido { get; private set; }
     public static Texture2D MapaEscolhido { get; private set; }
     public static bool Tutorial { get; private set; } // aberto pelo botão Tutorial
 
     private void Start()
     {
-        // vindo do jogo: destrava o tempo e solta o cursor (que estava preso no centro) pra clicar nos botões
+        // vindo do jogo: destrava o tempo e solta o cursor (que tava preso no centro) pra clicar nos botões
         Time.timeScale = 1f;
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
@@ -37,9 +38,11 @@ public class MenuInicial : MonoBehaviour
 
     public void Jogar() => MostrarPainel(painelPersonagem);
 
+    public void Controles() => MostrarPainel(painelControles);
+
     public void Voltar()
     {
-        // do mapa volta pra personagem; de personagem volta pro principal
+        // do mapa volta pra personagem, dos outros painéis volta pro principal
         MostrarPainel(painelMapa.activeSelf ? painelPersonagem : painelPrincipal);
     }
 
@@ -70,7 +73,7 @@ public class MenuInicial : MonoBehaviour
         SceneManager.LoadScene(nomeCenaJogo);
     }
 
-    // Tutorial: mapa pequeno, sempre com o primeiro personagem (Atirador)
+    // tutorial: mapa pequeno, sempre com o primeiro personagem (Atirador)
     public void ComecarTutorial()
     {
         PersonagemEscolhido = personagens[0];
@@ -84,5 +87,6 @@ public class MenuInicial : MonoBehaviour
         painelPrincipal.SetActive(painel == painelPrincipal);
         painelPersonagem.SetActive(painel == painelPersonagem);
         painelMapa.SetActive(painel == painelMapa);
+        painelControles.SetActive(painel == painelControles);
     }
 }

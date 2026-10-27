@@ -2,8 +2,8 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
-// Tutorial: uma lista de tarefas na tela. Cada item é marcado quando o jogador faz a ação.
-// Só aparece quando o jogo foi aberto pelo botão "Tutorial" do menu.
+// tutorial: uma lista de tarefas na tela. cada item é marcado quando o player faz a ação.
+// só aparece quando o jogo foi aberto pelo botão "Tutorial" do menu
 public class Tutorial : MonoBehaviour
 {
     [SerializeField] private GameObject painel;  // fundo da lista (começa escondido)

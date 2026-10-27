@@ -1,6 +1,6 @@
 using UnityEditor;
 
-// Importa as texturas de Assets/Art/Mapa/ sem alterar os pixels (sem redimensionar, comprimir ou filtrar)
+// importa as texturas de Assets/Art/Mapa/ sem mexer nos pixels (sem redimensionar, comprimir ou filtrar)
 public class MapaTexturaPostprocessor : AssetPostprocessor
 {
     void OnPreprocessTexture()

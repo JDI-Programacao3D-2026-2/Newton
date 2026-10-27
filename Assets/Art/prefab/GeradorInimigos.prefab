@@ -1,0 +1,62 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &4924803792235610448
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 5989368283660140597}
+  - component: {fileID: 1658757439768915307}
+  m_Layer: 0
+  m_Name: GeradorInimigos
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &5989368283660140597
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4924803792235610448}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1658757439768915307
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4924803792235610448}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4b948e40ae5bd5341867275bcbc8dee5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.GeradorInimigos
+  prefabHelicoptero: {fileID: 2103064120999716148, guid: ad79a2c16b0666549a8ccc2a96ff22f4, type: 3}
+  altura: 13
+  distancia: 200
+  velocidade: 22
+  velocidadeRotor: 1400
+  inimigos:
+  - {fileID: 1048225573400632292, guid: a737e8e50d84d7349a9e2a3fcc8a66ad, type: 3}
+  - {fileID: 2054592274405293910, guid: 2772842ab725b1941be5ecc10108e2cb, type: 3}
+  soldadosPorVisita: 3
+  intervaloDeSaida: 1.4
+  velocidadeRapel: 5
+  primeiraVisita: 8
+  intervalo: 25
+  maximoVivos: 20
+  folga: 3.5
+  distanciaMinimaDoJogador: 15

@@ -4,8 +4,7 @@ using UnityEngine.AI;
 
 namespace Game.Combat
 {
-    /// Máquina de estados do inimigo: patrulha, perseguição, cobertura, fuga e cura.
-    /// Vida, disparo e visão ficam no EnemyController.
+    // cérebro do inimigo: patrulha, perseguição, cobertura, fuga e cura. vida, tiro e visão ficam no EnemyController
     [RequireComponent(typeof(EnemyController))]
     public class EnemyFSM : MonoBehaviour
     {
@@ -52,11 +51,11 @@ namespace Game.Combat
 
         public enum EnemyState
         {
-            [InspectorName("Perseguir")] Pursuit, // Persegue o jogador
-            [InspectorName("Fugir")] Flee,        // Foge para um ponto fora da visão do jogador
-            [InspectorName("Cobertura")] Cover,   // Atira de uma posição com meio corpo exposto
-            [InspectorName("Curar")] Heal,        // Escondido, recuperando vida
-            [InspectorName("Patrulhar")] Patrol   // Não viu o jogador: anda pelo mapa procurando
+            [InspectorName("Perseguir")] Pursuit, // persegue o player
+            [InspectorName("Fugir")] Flee,        // foge pra um lugar onde o player não vê
+            [InspectorName("Cobertura")] Cover,   // atira de uma posição com meio corpo de fora
+            [InspectorName("Curar")] Heal,        // escondido, recuperando vida
+            [InspectorName("Patrulhar")] Patrol   // não viu o player: anda pelo mapa procurando
         }
 
         [Header("Debug")]
@@ -67,7 +66,7 @@ namespace Game.Combat
         private const float BodyHeight = 1f;
         private const float HideClaimSpacing = 2.5f;
 
-        // pontos já escolhidos por outros inimigos, pra não irem todos pro mesmo lugar
+        // lugares que outros inimigos já escolheram, pra não irem todos pro mesmo
         private static readonly Dictionary<EnemyFSM, Vector3> HideClaims = new Dictionary<EnemyFSM, Vector3>();
 
         // todos os inimigos ativos, pra chamar os amigos
@@ -78,13 +77,13 @@ namespace Game.Combat
         private bool _estavaAtordoado;
         private float _proximoChamado;
 
-        // zona que ele recebeu pra defender (continua guardada mesmo depois de capturada, pra ele se enfurecer)
+        // zona que ele recebeu pra defender (fica guardada mesmo depois de capturada, aí ele vai atrás do player)
         private ZonaCaptura _zona;
 
-        /// Zona de captura que este inimigo defende (nula = patrulha livre, ou a zona já foi capturada)
+        // zona que ele defende (nula = patrulha solto, ou a zona já foi capturada)
         public ZonaCaptura ZonaDefendida => _zona != null && !_zona.Capturada ? _zona : null;
 
-        // memória do jogador
+        // memória do player
         private Vector3 _lastKnownPlayerPos;
         private float _lastSeenTime = -999f;
         private bool _hasLastKnown;
@@ -115,7 +114,7 @@ namespace Game.Combat
         {
             _ctrl = GetComponent<EnemyController>();
             _agent = GetComponent<NavMeshAgent>();
-            estadoAtual = EnemyState.Patrol; // começa sem saber onde o jogador está
+            estadoAtual = EnemyState.Patrol; // começa sem saber onde o player está
         }
 
         private void OnEnable()
@@ -135,7 +134,7 @@ namespace Game.Combat
         {
             if (!_ctrl.enabled || _ctrl.IsDead || Jogador == null) return;
 
-            // atordoado: parado até acabar, e depois escolhe de novo o que fazer
+            // atordoado fica parado até acabar, depois escolhe de novo o que fazer
             if (_ctrl.Atordoado)
             {
                 _agent.isStopped = true;
@@ -176,7 +175,7 @@ namespace Game.Combat
 
             estadoAtual = newState;
 
-            // Na cobertura o corpo sempre encara o alvo; nos outros estados o agent gira sozinho
+            // na cobertura o corpo sempre olha pro alvo, nos outros estados o agent gira sozinho
             _agent.updateRotation = newState != EnemyState.Cover;
 
             if (newState == EnemyState.Pursuit)
@@ -201,7 +200,7 @@ namespace Game.Combat
                 _nextHidePathTime = 0f; // escolhe esconderijo no próximo frame
         }
 
-        // levou tiro: vai investigar e pede ajuda (em qualquer estado, mas no máximo a cada 3 s)
+        // levou tiro: vai ver o que foi e chama ajuda (no máximo a cada 3 s)
         private void OnDamaged()
         {
             if (Jogador == null) return;
@@ -216,8 +215,8 @@ namespace Game.Combat
             }
         }
 
-        // Chama os amigos que patrulham dentro do raio de alerta: eles vão até onde o jogador está.
-        // O chamado passa de vizinho em vizinho (amigos dos amigos) até 'saltosDoAlerta' vezes.
+        // chama os amigos que tão patrulhando perto, eles vão até onde o player está
+        // o chamado passa de amigo pra amigo (amigos dos amigos) até 'saltosDoAlerta' vezes
         private void ChamarAmigos(Vector3 posicaoDoJogador, int salto)
         {
             foreach (EnemyFSM amigo in Ativos.ToArray())
@@ -236,17 +235,15 @@ namespace Game.Combat
             _hasLastKnown = true;
             ChangeState(EnemyState.Pursuit);
 
-            // quem foi chamado também chama os vizinhos dele
+            // quem foi chamado também chama os vizinhos
             if (salto < saltosDoAlerta) ChamarAmigos(posicaoDoJogador, salto);
         }
 
-        // ---------- Defesa de zona ----------
-
-        // Passa a patrulhar em volta dessa zona (em vez de em volta de onde nasceu)
+        // passa a patrulhar em volta dessa zona (em vez de onde nasceu)
         public void DefenderZona(ZonaCaptura zona)
         {
             _zona = zona;
-            _patrolHasDestination = false; // escolhe um ponto novo, perto da zona, já na próxima patrulha
+            _patrolHasDestination = false; // escolhe um ponto novo perto da zona na próxima patrulha
             _nextPatrolTime = 0f;
         }
 
@@ -257,15 +254,13 @@ namespace Game.Combat
             _hasLastKnown = true;
         }
 
-        // Encara o jogador, ou o último lugar onde o viu se estiver sem visão dele
+        // olha pro player, ou pro último lugar onde viu ele se tiver perdido de vista
         private void FacePlayer()
         {
             _ctrl.RotateTowards(_seesPlayerNow || !_hasLastKnown ? Jogador.position : _lastKnownPlayerPos);
         }
 
-        // ---------- Patrulha ----------
-
-        // Anda por pontos aleatórios do NavMesh até ver o jogador
+        // anda por pontos aleatórios do NavMesh até ver o player
         private void Patrol()
         {
             if (_ctrl.CanSeePlayer())
@@ -276,7 +271,7 @@ namespace Game.Combat
                 return;
             }
 
-            // a zona que ele defendia foi capturada: vai atrás do jogador
+            // a zona que ele defendia foi capturada: vai atrás do player
             if (_zona != null && _zona.Capturada)
             {
                 _zona = null;
@@ -311,7 +306,7 @@ namespace Game.Combat
         {
             _patrolPath ??= new NavMeshPath();
 
-            // defensor de zona patrulha em volta da zona; os outros, em volta de onde estão
+            // defensor patrulha em volta da zona, os outros em volta de onde tão
             bool defendendo = ZonaDefendida != null;
             Vector3 centro = defendendo ? ZonaDefendida.transform.position : transform.position;
             float raio = defendendo ? raioDefesaZona : raioPatrulha;
@@ -333,8 +328,6 @@ namespace Game.Combat
             return false;
         }
 
-        // ---------- Perseguição ----------
-
         private void Pursuit()
         {
             // vida baixa: foge
@@ -348,14 +341,14 @@ namespace Game.Combat
             {
                 NotePlayerSeen();
 
-                // melee não usa cobertura: chega perto e bate
+                // espadachim não usa cobertura: chega perto e bate
                 if (_ctrl.CorpoACorpo)
                 {
                     AtacarCorpoACorpo();
                     return;
                 }
 
-                // no alcance: procura uma posição de cobertura
+                // no alcance: procura uma cobertura
                 float sqrDistance = (Jogador.position - transform.position).sqrMagnitude;
                 if (sqrDistance <= _ctrl.AlcanceEfetivo * _ctrl.AlcanceEfetivo)
                 {
@@ -368,7 +361,7 @@ namespace Game.Combat
                 return;
             }
 
-            // Perdeu de vista: vai até o último lugar onde viu o jogador e depois volta a patrulhar
+            // perdeu de vista: vai até o último lugar onde viu o player e depois volta a patrulhar
             if (!_hasLastKnown || Time.time - _lastSeenTime > tempoMemoria)
             {
                 ChangeState(EnemyState.Patrol);
@@ -382,7 +375,7 @@ namespace Game.Combat
             if (chegou) ChangeState(EnemyState.Patrol);
         }
 
-        // Dentro do alcance da espada para e ataca; fora dele, corre até o jogador
+        // dentro do alcance da espada para e ataca, fora dele corre até o player
         private void AtacarCorpoACorpo()
         {
             float sqrDistance = (Jogador.position - transform.position).sqrMagnitude;
@@ -398,9 +391,7 @@ namespace Game.Combat
             _agent.SetDestination(Jogador.position);
         }
 
-        // ---------- Cobertura ----------
-
-        // Atira de uma posição com cobertura parcial e troca de lugar de tempos em tempos
+        // atira de um lugar com cobertura parcial e troca de lugar de vez em quando
         private void Cover()
         {
             if (IsLowHealth)
@@ -413,11 +404,11 @@ namespace Game.Combat
             float sqrDistance = (Jogador.position - transform.position).sqrMagnitude;
             if (sqrDistance > alcance * alcance * 1.5f)
             {
-                ChangeState(EnemyState.Pursuit); // jogador se afastou
+                ChangeState(EnemyState.Pursuit); // o player se afastou
                 return;
             }
 
-            // Sem ver o jogador por um tempo, volta a perseguir (indo ao último ponto conhecido)
+            // sem ver o player por um tempo, volta a perseguir (indo pro último ponto que viu)
             _seesPlayerNow = _ctrl.CanSeePlayer();
             if (_seesPlayerNow)
             {
@@ -434,8 +425,8 @@ namespace Game.Combat
                 }
             }
 
-            // Jogador atrás de um muro (sem linha de tiro por um tempo): avança até achar um ângulo,
-            // em vez de ficar só trocando de cobertura sem atirar
+            // player atrás de um muro (sem linha de tiro por um tempo): avança até achar um ângulo,
+            // em vez de ficar trocando de cobertura sem atirar
             if (_ctrl.HasLineOfSightToPlayer())
             {
                 _semLinhaDeTiroDesde = -1f;
@@ -474,7 +465,7 @@ namespace Game.Combat
 
             if (!_hasCoverSpot)
             {
-                // sem cobertura disponível: atira parado se vê o jogador, senão se aproxima
+                // sem cobertura: atira parado se vê o player, senão chega mais perto
                 if (sqrDistance <= alcance * alcance && _ctrl.HasLineOfSightToPlayer())
                 {
                     _agent.isStopped = true;
@@ -490,10 +481,10 @@ namespace Game.Combat
                 return;
             }
 
-            // encara o jogador mesmo andando
+            // olha pro player mesmo andando
             FacePlayer();
 
-            // ponto escolhido perdeu a visão: escolhe outro
+            // o ponto escolhido perdeu a visão: escolhe outro
             if (Time.time >= _nextValidateTime)
             {
                 _nextValidateTime = Time.time + 0.25f;
@@ -503,7 +494,7 @@ namespace Game.Combat
 
             bool arrived = !_agent.pathPending && _agent.remainingDistance <= _agent.stoppingDistance + 0.3f;
 
-            // atira enquanto anda, se tiver visão livre
+            // atira andando, se tiver visão livre
             if (!arrived)
             {
                 if (_ctrl.HasLineOfSightToPlayer()) _ctrl.TryFire();
@@ -519,13 +510,13 @@ namespace Game.Combat
             }
             else
             {
-                // chegou mas não enxerga o jogador: troca de posição
+                // chegou mas não vê o player: troca de lugar
                 if (_blockedSince < 0f) _blockedSince = Time.time;
                 if (Time.time - _blockedSince > 0.35f) _nextCoverRepathTime = 0f;
             }
         }
 
-        // Procura um ponto onde o jogador é visível mas um dos lados do corpo fica atrás de um obstáculo
+        // procura um ponto onde o player aparece mas um lado do corpo fica atrás de um obstáculo
         private bool TryFindCoverSpot(out Vector3 spot)
         {
             spot = transform.position;
@@ -575,8 +566,6 @@ namespace Game.Combat
             return found;
         }
 
-        // ---------- Fuga e cura ----------
-
         private void Flee()
         {
             _agent.isStopped = false;
@@ -610,7 +599,7 @@ namespace Game.Combat
                 ChangeState(EnemyState.Flee);
         }
 
-        // Ponto mais próximo que o jogador não enxerga; se não houver, o mais distante dele
+        // ponto mais perto que o player não vê (se não tiver, o mais longe dele)
         private Vector3 FindHidingSpot()
         {
             Vector3 bestHidden = transform.position;
@@ -673,7 +662,7 @@ namespace Game.Combat
             return false;
         }
 
-        // Na Scene (inimigo selecionado): círculo laranja = raio do chamado de ajuda
+        // na Scene (inimigo selecionado): círculo laranja = raio do chamado de ajuda
         private void OnDrawGizmosSelected()
         {
             Gizmos.color = new Color(1f, 0.5f, 0f);

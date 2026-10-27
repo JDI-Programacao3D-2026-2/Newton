@@ -7,8 +7,7 @@ using UnityEngine.UI;
 
 namespace Game.Combat
 {
-    /// Duas habilidades por personagem, nas teclas Q e E. Cada prefab escolhe no Inspector
-    /// qual habilidade fica em cada tecla (Atirador: Rajada + Granada, Espadachim: Giro + Stun).
+    // duas habilidades por personagem, nas teclas Q e E. cada prefab escolhe no Inspector qual fica em cada tecla
     public class Habilidades : MonoBehaviour
     {
         public enum Tipo { Rajada, Granada, Giro, Stun, Fumaca, Bombardeio }
@@ -87,7 +86,7 @@ namespace Game.Combat
         [SerializeField, Min(0f)] private float danoBombardeio = 30f;
         [SerializeField, Min(1f)] private float alcanceBombardeio = 25f;
 
-        // fumaças em cena agora (o EnemyController consulta pra saber se o jogador está escondido)
+        // fumaças que existem agora (o EnemyController olha aqui pra saber se o player tá escondido)
         private static readonly List<Transform> FumacasAtivas = new List<Transform>();
 
         private WeaponPlayer _arma;
@@ -110,8 +109,8 @@ namespace Game.Combat
         private float _proximoE;
         private float _proximaAtualizacaoHud;
 
-        // A fumaça bloqueia a visão se a linha entre os dois pontos passa por alguma nuvem
-        // (ou se um deles está dentro dela): serve pro inimigo cego dentro da fumaça e pro jogador escondido atrás dela.
+        // a fumaça bloqueia a visão se a linha entre os dois pontos passa por alguma nuvem
+        // (ou se um deles tá dentro dela). serve pro inimigo cego dentro da fumaça e pro player escondido atrás dela
         public static bool BloqueiaVisao(Vector3 de, Vector3 ate)
         {
             Vector3 linha = ate - de;
@@ -135,7 +134,7 @@ namespace Game.Combat
             _arma = GetComponent<WeaponPlayer>();
             _meusColliders = GetComponentsInChildren<Collider>();
 
-            // pools criados já no início, pra não dar Instantiate no meio da partida
+            // cria os pools já no começo pra não dar Instantiate no meio da partida
             _granadas = CriarPool(prefabGranada, tamanhoPool);
             _latas = CriarPool(prefabLataFumaca, 2);
             _misseis = CriarPool(prefabMissil, 4);
@@ -150,7 +149,7 @@ namespace Game.Combat
             }
         }
 
-        // Cria 'quantidade' cópias desligadas do prefab (fila vazia se o personagem não usa essa habilidade)
+        // cria 'quantidade' cópias desligadas do prefab (fila vazia se o personagem não usa essa habilidade)
         private static Queue<T> CriarPool<T>(T prefab, int quantidade) where T : Component
         {
             var fila = new Queue<T>();
@@ -168,7 +167,7 @@ namespace Game.Combat
 
         private void Update()
         {
-            // pausado (sair, vitória ou derrota): não usa habilidades
+            // pausado (sair, vitória ou derrota): não usa habilidade
             if (Time.timeScale > 0f)
             {
                 Entrada(Keyboard.current.qKey, habilidadeQ, ref _proximoQ, recargaQ);
@@ -179,7 +178,7 @@ namespace Game.Combat
             AtualizarHud();
         }
 
-        // As habilidades disparam ao apertar a tecla. O bombardeio é "segure pra mirar, solte pra disparar".
+        // a habilidade dispara quando aperta a tecla. o bombardeio é "segura pra mirar, solta pra disparar"
         private void Entrada(ButtonControl tecla, Tipo tipo, ref float proximo, float recarga)
         {
             if (tipo != Tipo.Bombardeio)
@@ -220,8 +219,6 @@ namespace Game.Combat
             }
         }
 
-        // ---------- Rajada ----------
-
         private bool Rajada()
         {
             if (_arma.CorpoACorpo) return false;
@@ -240,8 +237,6 @@ namespace Game.Combat
             }
         }
 
-        // ---------- Granada ----------
-
         private bool Granada()
         {
             if (_granadas.Count == 0) return false;
@@ -254,7 +249,7 @@ namespace Game.Combat
             return true;
         }
 
-        // Liga o objeto na frente do jogador e joga com essa velocidade (granada e lata de fumaça)
+        // põe o objeto na frente do player e joga com essa velocidade (granada e lata de fumaça)
         private Vector3 OrigemDoArremesso => transform.position + transform.forward + Vector3.up * 0.8f;
 
         private void Arremessar(Rigidbody objeto, Vector3 velocidade)
@@ -263,7 +258,7 @@ namespace Game.Combat
             objeto.transform.position = OrigemDoArremesso;
             objeto.gameObject.SetActive(true);
 
-            // não bate no próprio jogador que acabou de jogar
+            // não bate no próprio player que acabou de jogar
             Collider colisor = objeto.GetComponent<Collider>();
             foreach (Collider meu in _meusColliders)
                 Physics.IgnoreCollision(colisor, meu, true);
@@ -281,11 +276,11 @@ namespace Game.Combat
             granada.gameObject.SetActive(false);
             _granadas.Enqueue(granada);
 
-            DanoEmArea(posicao, raioGranada, danoGranada, true); // fogo amigo: a granada machuca o jogador também
+            DanoEmArea(posicao, raioGranada, danoGranada, true); // fogo amigo: a granada machuca o player também
             yield return ExplosaoRotina(posicao, raioGranada);
         }
 
-        // O Particle System da explosão toca sozinho ao ser ligado; a escala dele é o diâmetro da explosão
+        // o Particle System da explosão toca sozinho quando liga, e a escala dele é o diâmetro da explosão
         private IEnumerator ExplosaoRotina(Vector3 posicao, float raio)
         {
             if (_explosoes.Count == 0) yield break;
@@ -301,8 +296,6 @@ namespace Game.Combat
             _explosoes.Enqueue(explosao);
         }
 
-        // ---------- Giro ----------
-
         private bool Giro()
         {
             if (animacaoEspada != null) animacaoEspada.Play(clipeGiro);
@@ -316,8 +309,6 @@ namespace Game.Combat
             yield return new WaitForSeconds(atraso);
             DanoEmArea(transform.position, raioGiro, danoGiro);
         }
-
-        // ---------- Stun ----------
 
         private bool Stun()
         {
@@ -338,15 +329,13 @@ namespace Game.Combat
             return true;
         }
 
-        // ---------- Fumaça ----------
-
-        // Joga uma lata de fumaça em arco até o ponto mirado; ao pousar ela solta a nuvem.
-        // Enquanto o jogador estiver dentro da nuvem, os inimigos não o enxergam.
+        // joga uma lata de fumaça em arco até o ponto mirado, quando pousa ela solta a nuvem.
+        // enquanto o player tiver dentro da nuvem os inimigos não enxergam ele
         private bool Fumaca()
         {
             if (_latas.Count == 0 || _fumacas.Count == 0) return false;
 
-            // velocidade que leva a lata até o ponto mirado em 'tempoDeVooLata' segundos (com a gravidade)
+            // velocidade pra lata chegar no ponto mirado em 'tempoDeVooLata' segundos (com a gravidade)
             Vector3 alvo = _arma.PontoDaMira(alcanceFumaca);
             Vector3 velocidade = (alvo - OrigemDoArremesso) / tempoDeVooLata - 0.5f * Physics.gravity * tempoDeVooLata;
 
@@ -382,9 +371,7 @@ namespace Game.Combat
             _latas.Enqueue(lata);
         }
 
-        // ---------- Bombardeio ----------
-
-        // Chuva de mísseis numa área em volta do ponto mirado
+        // chuva de mísseis numa área em volta do ponto mirado
         private bool Bombardeio()
         {
             if (_bombardeando) return false;
@@ -407,11 +394,11 @@ namespace Game.Combat
                 yield return espera;
             }
 
-            yield return new WaitForSeconds(0.6f);               // o último míssil ainda está caindo
+            yield return new WaitForSeconds(0.6f);               // o último míssil ainda tá caindo
             _bombardeando = false;
         }
 
-        // Um míssil cai do céu, de ponta pra baixo, no ponto sorteado e explode (machuca o jogador também)
+        // um míssil cai do céu de ponta pra baixo no ponto sorteado e explode (machuca o player também)
         private IEnumerator MissilRotina(Vector3 ponto)
         {
             // acha o chão embaixo do ponto sorteado
@@ -451,8 +438,8 @@ namespace Game.Combat
             yield return ExplosaoRotina(ponto, raioExplosaoBombardeio);
         }
 
-        // Só enquanto a tecla do bombardeio está apertada o círculo aparece e segue a mira (branco).
-        // Ao soltar, ele dispara e o círculo fica fixo e vermelho (MostrarArea no começo do bombardeio).
+        // o círculo só aparece (e segue a mira, branco) enquanto a tecla do bombardeio tá apertada.
+        // ao soltar ele dispara e o círculo fica fixo e vermelho (MostrarArea no começo do bombardeio)
         private void AtualizarMiraBombardeio()
         {
             if (_circulo == null || _bombardeando) return;
@@ -473,10 +460,8 @@ namespace Game.Combat
             _circuloRenderer.SetPropertyBlock(_tintaCirculo);
         }
 
-        // ---------- Comum ----------
-
-        // Dano em todos os IDamageable no raio, uma vez por alvo.
-        // 'fogoAmigo' = explosões (granada e míssil) machucam o próprio jogador; o giro da espada não.
+        // dano em todo mundo que pode levar dano (IDamageable) no raio, uma vez por alvo.
+        // 'fogoAmigo': explosão (granada e míssil) machuca o próprio player, o giro da espada não
         private void DanoEmArea(Vector3 centro, float raio, float dano, bool fogoAmigo = false)
         {
             int count = Physics.OverlapSphereNonAlloc(centro, raio, _area,
@@ -493,7 +478,7 @@ namespace Game.Combat
             }
         }
 
-        // O círculo escuro esvazia durante a recarga; o texto mostra os segundos que faltam
+        // o círculo escuro esvazia durante a recarga e o texto mostra os segundos que faltam
         private void AtualizarHud()
         {
             bool atualizarTexto = Time.time >= _proximaAtualizacaoHud;

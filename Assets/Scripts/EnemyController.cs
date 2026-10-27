@@ -4,8 +4,7 @@ using UnityEngine.AI;
 
 namespace Game.Combat
 {
-    /// Vida, disparo e visão do inimigo. Os estados (patrulha, perseguição, cobertura, fuga e cura)
-    /// ficam no EnemyFSM.
+    // vida, tiro e visão do inimigo. o comportamento (patrulha, perseguição etc.) fica no EnemyFSM
     [RequireComponent(typeof(NavMeshAgent))]
     [RequireComponent(typeof(EnemyFSM))]
     public class EnemyController : MonoBehaviour, IDamageable
@@ -43,9 +42,9 @@ namespace Game.Combat
         [Tooltip("Dentro desse raio ele percebe o jogador mesmo fora do cone")]
         [SerializeField, Min(0f)] private float raioPercepcao = 3f;
 
-        private Transform jogador; // o Player da cena, achado pela tag
+        private Transform jogador; // o player da cena (achado pela tag)
 
-        // inimigos vivos e derrotados (placar do Tab e vitória do tutorial)
+        // quantos inimigos vivos e quantos já morreram (placar do Tab e vitória do tutorial)
         private static int _alive;
         private static int _killed;
         public static int Abates => _killed;
@@ -58,12 +57,12 @@ namespace Game.Combat
         private float _currentHealth;
         private float _nextAttackTime;
 
-        // atordoado: não anda, não ataca (o FSM e o disparo conferem isso)
+        // atordoado não anda nem ataca
         private float _atordoadoAte;
         private Renderer _corpo;
         private MaterialPropertyBlock _tinta;
 
-        /// Disparado quando o inimigo leva dano (o FSM usa pra investigar de onde veio o tiro).
+        // avisa quando leva dano (o FSM usa pra ir ver de onde veio o tiro)
         public event System.Action Damaged;
 
         public bool CorpoACorpo => corpoACorpo;
@@ -71,32 +70,37 @@ namespace Game.Combat
         public bool IsDead => _currentHealth <= 0f;
         public float VidaFracao => _currentHealth / vidaMaxima;
 
-        // O ataque nunca passa da distância de visão
+        // o ataque nunca passa da distância de visão
         public float AlcanceEfetivo => Mathf.Min(alcanceAtaque, distanciaVisao);
 
-        // Se o jogador ainda não existia (ou foi destruído e recriado), procura de novo pela tag
+        // se o player ainda não existia (ou foi recriado), procura de novo pela tag
         public Transform Jogador
         {
             get
             {
-                if (jogador == null) jogador = FindPlayerByTag();
+                if (jogador == null)
+                {
+                    GameObject achado = GameObject.FindGameObjectWithTag("Player");
+                    jogador = achado != null ? achado.transform : null;
+                }
+
                 return jogador;
             }
         }
 
         private void Awake()
         {
-            if (_alive == 0) _killed = 0; // fase nova: zera a contagem
+            if (_alive == 0) _killed = 0; // fase nova, zera a contagem
             _alive++;
 
             _agent = GetComponent<NavMeshAgent>();
             _currentHealth = vidaMaxima;
 
-            // Kinematic: o NavMeshAgent move o inimigo, a física não deve empurrá-lo
+            // quem move o inimigo é o NavMeshAgent, a física não pode empurrar
             if (TryGetComponent(out Rigidbody body))
                 body.isKinematic = true;
 
-            if (corpoACorpo) return; // a espada não usa projétil
+            if (corpoACorpo) return; // espadachim não usa projétil
 
             if (prefabProjetil == null || bocaDoCano == null)
             {
@@ -109,17 +113,11 @@ namespace Game.Combat
                 ReturnProjectileToPool(CreateProjectile());
         }
 
-        private static Transform FindPlayerByTag()
-        {
-            GameObject found = GameObject.FindGameObjectWithTag("Player");
-            return found != null ? found.transform : null;
-        }
-
         private void OnDestroy()
         {
             _alive--;
 
-            // os projéteis do pool não são filhos do inimigo: limpa pra não ficarem soltos na cena
+            // os projéteis do pool não são filhos do inimigo, então apaga junto
             foreach (Projectile projectile in _pooledProjectiles)
                 if (projectile != null) Destroy(projectile.gameObject);
         }
@@ -129,15 +127,15 @@ namespace Game.Combat
             if (IsDead) return;
 
             _atordoadoAte = Mathf.Max(_atordoadoAte, Time.time + segundos);
-            _agent.isStopped = true;
+            if (_agent.isOnNavMesh) _agent.isStopped = true;
 
-            Pintar(new Color(1f, 0.9f, 0.1f)); // fica amarelo enquanto dura
+            Pintar(new Color(1f, 0.9f, 0.1f)); // fica amarelo enquanto durar
 
             CancelInvoke(nameof(RestaurarCor));
             Invoke(nameof(RestaurarCor), _atordoadoAte - Time.time);
         }
 
-        // Troca a cor do corpo sem mexer no material (cada inimigo tem a sua)
+        // troca a cor sem mexer no material, cada inimigo tem a sua
         private void Pintar(Color cor)
         {
             _corpo ??= GetComponent<Renderer>();
@@ -146,7 +144,7 @@ namespace Game.Combat
             _corpo.SetPropertyBlock(_tinta);
         }
 
-        // Volta à cor normal; atordoado, volta ao amarelo e só restaura quando o stun acabar
+        // volta pra cor normal (se ainda tiver atordoado, volta pro amarelo)
         private void RestaurarCor()
         {
             if (!Atordoado)
@@ -172,7 +170,7 @@ namespace Game.Combat
             _currentHealth = Mathf.Max(0f, _currentHealth - amount);
             Damaged?.Invoke();
 
-            // pisca em branco um instante: o jogador vê que acertou
+            // pisca branco rapidinho pra mostrar que acertou
             Pintar(Color.white);
             CancelInvoke(nameof(RestaurarCor));
             Invoke(nameof(RestaurarCor), 0.1f);
@@ -184,14 +182,14 @@ namespace Game.Combat
         private void Die()
         {
             _killed++;
-            _agent.isStopped = true;
+            if (_agent.isOnNavMesh) _agent.isStopped = true;   // na corda do helicóptero o agente ainda tá desligado
             Destroy(gameObject);
         }
 
-        // Vê o jogador se ele está no alcance, dentro do cone (ou muito perto) e sem parede no caminho
+        // vê o player se ele tá no alcance, dentro do cone (ou bem perto) e sem parede no meio
         public bool CanSeePlayer()
         {
-            // fumaça entre o inimigo e o jogador (ou em cima de um dos dois): ninguém enxerga
+            // fumaça no meio (ou em cima de um dos dois): não vê
             if (Habilidades.BloqueiaVisao(transform.position, jogador.position)) return false;
 
             Vector3 toPlayer = jogador.position - transform.position;
@@ -206,7 +204,7 @@ namespace Game.Combat
                    HasLineOfSight(transform.position, jogador.position + Vector3.up * 0.8f);
         }
 
-        // Verifica se há linha livre da boca do cano até o jogador
+        // confere se tem linha livre do cano até o player
         public bool HasLineOfSightToPlayer()
         {
             Vector3 origin = bocaDoCano.position;
@@ -226,7 +224,7 @@ namespace Game.Combat
             return true;
         }
 
-        // Linha de visão livre entre dois pontos (ignora o próprio inimigo, o jogador e outros inimigos)
+        // linha livre entre dois pontos (ignora o próprio inimigo, o player e os outros inimigos)
         public bool HasLineOfSight(Vector3 from, Vector3 to)
         {
             Vector3 offset = to - from;
@@ -244,7 +242,7 @@ namespace Game.Combat
             return true;
         }
 
-        // Gira o corpo para o alvo (o cano é filho dele)
+        // gira o corpo pro alvo (o cano é filho dele)
         public void RotateTowards(Vector3 alvo)
         {
             Vector3 direction = alvo - transform.position;
@@ -261,7 +259,7 @@ namespace Game.Combat
 
             _nextAttackTime = Time.time + intervaloAtaque;
 
-            // espada: a lâmina desce e, no meio do golpe, o dano vale se o jogador ainda estiver perto
+            // espada: desce a lâmina e no meio do golpe o dano vale, se o player ainda estiver perto
             if (corpoACorpo)
             {
                 if (animacaoEspada != null) animacaoEspada.Play();
@@ -281,7 +279,7 @@ namespace Game.Combat
         {
             if (IsDead || Atordoado || jogador == null) return;
 
-            // um pouco de folga: o jogador pode ter andado durante o golpe
+            // uma folguinha, o player pode ter andado durante o golpe
             float alcance = AlcanceEfetivo * 1.3f;
             if ((jogador.position - transform.position).sqrMagnitude > alcance * alcance) return;
 
@@ -303,7 +301,7 @@ namespace Game.Combat
         {
             if (projectile == null) return;
 
-            // tiro que ainda voava quando o dono morreu: não tem pool pra voltar
+            // tiro que ainda tava voando quando o dono morreu, não tem pool pra voltar
             if (this == null)
             {
                 Destroy(projectile.gameObject);

@@ -5,10 +5,10 @@ using UnityEngine;
 using UnityEngine.AI;
 using UnityEngine.Events;
 
-// Le a pixel art de Assets/Art/Mapa/ e monta o mapa com os prefabs configurados no Inspector.
-// Cor do inimigo/player parecida com o piso ao redor = nasce "escondido" ali.
-// Botão "Gerar Preview no Editor" mostra o resultado sem precisar dar Play.
-// Depois de gerar, constrói o NavMesh e só então coloca o player e os inimigos.
+// lê a pixel art de Assets/Art/Mapa/ e monta o mapa com os prefabs configurados no Inspector.
+// cor de inimigo/player parecida com o piso em volta = nasce "escondido" ali.
+// o botão "Gerar Preview no Editor" mostra o resultado sem precisar dar Play.
+// depois de gerar, constrói o NavMesh e só então coloca o player e os inimigos.
 
 public class MapaGerador : MonoBehaviour
 {
@@ -38,12 +38,12 @@ public class MapaGerador : MonoBehaviour
     [Header("Evento apos gerar")]
     public UnityEvent aoTerminarDeGerar;
 
-    // O player instanciado no spawn, disponível depois que aoTerminarDeGerar dispara.
+    // o player que nasceu no spawn, disponível depois que aoTerminarDeGerar dispara
     public GameObject PlayerInstanciado { get; private set; }
 
     const int ToleranciaCor = 900;
     const float SegundosPorFrame = 0.008f;
-    // Acima dessa altura o objeto não é andável (prédio, árvore)
+    // acima dessa altura o objeto não dá pra andar (prédio, árvore)
     const float AlturaMaximaAndavel = 0.6f;
 
     float inicioDoFrame;
@@ -57,7 +57,7 @@ public class MapaGerador : MonoBehaviour
         StartCoroutine(GerarMapaInterno(instantaneo: false));
     }
 
-    // Gera o mapa na hora, sem pausas por frame — pra ver o resultado no Editor sem apertar Play.
+    // gera o mapa na hora, sem pausa por frame, pra ver o resultado no Editor sem dar Play
     public void GerarPreviewNoEditor()
     {
         var rotina = GerarMapaInterno(instantaneo: true);
@@ -88,15 +88,14 @@ public class MapaGerador : MonoBehaviour
         }
         _inimigosGerados.Clear();
 
-        // O player não é filho do MapaGerador (não pode entrar na combinação de meshes), então
-        // limpa à parte. Remove qualquer Player solto na cena por tag, não só pela referência
-        // guardada — se o preview do Editor sobreviver ao entrar em Play (depende da config de
-        // Enter Play Mode Settings da Unity), a referência antiga ainda é válida, mas é mais
-        // seguro garantir que não sobra nenhum player duplicado de qualquer jeito.
+        // o player não é filho do MapaGerador (não pode entrar na combinação de meshes), então
+        // limpa separado. apaga qualquer Player solto na cena pela tag, não só pela referência guardada,
+        // porque se o preview do Editor sobreviver ao Play (depende do Enter Play Mode Settings)
+        // a referência antiga ainda vale. melhor garantir que não sobra player duplicado.
         foreach (GameObject p in GameObject.FindGameObjectsWithTag("Player"))
         {
-            // Destroy só vale no fim do frame: tira a tag já, senão um inimigo que nasce neste mesmo
-            // frame (mapa pequeno) acharia o player antigo e ficaria parado depois que ele sumisse.
+            // o Destroy só vale no fim do frame: tira a tag já, senão um inimigo que nasce nesse mesmo
+            // frame (mapa pequeno) acha o player antigo e fica parado depois que ele some
             p.tag = "Untagged";
 
             if (Application.isPlaying) Destroy(p);
@@ -130,8 +129,8 @@ public class MapaGerador : MonoBehaviour
         bool playerValido = player != null && player.prefab != null &&
             !(player.cor.r == 0 && player.cor.g == 0 && player.cor.b == 0 && player.cor.a == 0);
 
-        // Camada de chão (vira retângulos), árvores (um por pixel) e inimigos (um por pixel)
-        // Guarda também qual piso nasceu embaixo de cada ponto, pra apoiar o objeto na altura certa dele
+        // camada de chão (vira retângulos), árvores (uma por pixel) e inimigos (um por pixel)
+        // guarda também qual piso nasceu embaixo de cada ponto, pra apoiar o objeto na altura certa
         TileDefinicao[] camadaChao = new TileDefinicao[largura * altura];
         var arvores = new List<(int x, int y, TileDefinicao tile, TileDefinicao piso, TileDefinicao contexto)>();
         var inimigosAGerar = new List<(int x, int y, InimigoDefinicao inimigo, TileDefinicao piso)>();
@@ -167,7 +166,7 @@ public class MapaGerador : MonoBehaviour
             TileDefinicao tile = EncontrarTile(cor, tiles);
             if (tile == null)
             {
-                // Cor opaca que não é de nenhum tile: vira um buraco no mapa. Conta pra avisar depois.
+                // cor opaca que não é de nenhum tile: vira buraco no mapa. conta pra avisar depois
                 string chave = $"({cor.r}, {cor.g}, {cor.b})";
                 coresSemTile.TryGetValue(chave, out int n);
                 coresSemTile[chave] = n + 1;
@@ -200,11 +199,11 @@ public class MapaGerador : MonoBehaviour
                 TileDefinicao tile = camadaChao[i];
                 if (tile == null || usado[i]) continue;
 
-                // Estica para a direita enquanto a cor for igual
+                // estica pra direita enquanto a cor for igual
                 int w = 1;
                 while (x + w < largura && !usado[i + w] && camadaChao[i + w] == tile) w++;
 
-                // Estica para baixo enquanto a linha inteira for igual
+                // estica pra baixo enquanto a linha inteira for igual
                 int h = 1;
                 while (y + h < altura && LinhaIgual(camadaChao, usado, largura, x, y + h, w, tile)) h++;
 
@@ -237,16 +236,15 @@ public class MapaGerador : MonoBehaviour
         // NavMesh só do mapa (também no preview, pra ver a área andável na Scene)
         if (construirNavMesh)
         {
-            // se o NavMesh falhar, player e inimigos ainda nascem
+            // se o NavMesh falhar, player e inimigos nascem do mesmo jeito
             try { ConstruirNavMesh(); }
             catch (System.Exception e) { Debug.LogError($"MapaGerador: falha ao construir o NavMesh: {e.Message}"); }
         }
 
-        // Combinar meshes só faz sentido em runtime de verdade, não no preview do Editor
+        // combinar meshes só faz sentido no Play de verdade, não no preview do Editor
         if (Application.isPlaying) StaticBatchingUtility.Combine(gameObject);
 
-
-        // No preview os inimigos aparecem só pra mostrar onde nascem
+        // no preview os inimigos aparecem só pra mostrar onde nascem
         if (instantaneo)
         {
             foreach (var (x, y, inimigo, piso) in inimigosAGerar)
@@ -257,17 +255,16 @@ public class MapaGerador : MonoBehaviour
             }
         }
 
-        // Player fica fora da combinação acima (ele se move, não pode ser "assado" junto com o mapa)
+        // o player fica fora da combinação acima (ele se move, não pode ser "assado" junto com o mapa)
         if (posicaoPlayer.HasValue)
         {
-            // personagem escolhido no menu; sem escolha, usa o prefab configurado no Inspector
+            // personagem escolhido no menu (sem escolha, usa o prefab do Inspector)
             PersonagemData escolhido = MenuInicial.PersonagemEscolhido;
             PlayerInstanciado = Instantiate(escolhido != null && escolhido.prefab != null ? escolhido.prefab : player.prefab);
 
-            // Desliga o CharacterController antes de teleportar e religa depois — mover o
-            // Transform direto com o controller ligado deixa o estado interno dele (chão,
-            // colisão) inconsistente de vez em quando, causando esse "nasce fora do mapa"
-            // só em algumas rodadas.
+            // desliga o CharacterController antes de teleportar e liga depois: mexer no Transform com ele ligado
+            // deixa o estado interno dele (chão, colisão) bagunçado de vez em quando, e aí o player
+            // "nasce fora do mapa" só em algumas rodadas
             CharacterController controller = PlayerInstanciado.GetComponent<CharacterController>();
             if (controller != null) controller.enabled = false;
 
@@ -288,7 +285,7 @@ public class MapaGerador : MonoBehaviour
             Debug.LogWarning("MapaGerador: nenhum pixel com a cor do Player foi encontrado na pixel art.");
         }
 
-        // Inimigos por último: precisam do NavMesh pronto e do player na cena
+        // inimigos por último: precisam do NavMesh pronto e do player na cena
         if (!instantaneo)
         {
             foreach (var (x, y, inimigo, piso) in inimigosAGerar)
@@ -310,7 +307,7 @@ public class MapaGerador : MonoBehaviour
         if (surface == null) surface = gameObject.AddComponent<NavMeshSurface>();
 
         surface.collectObjects = CollectObjects.Children;
-        // Usa as malhas visíveis: a malha do MeshCollider dos prefabs do ProBuilder é recriada depois
+        // usa as malhas visíveis: a malha do MeshCollider dos prefabs do ProBuilder é recriada depois
         surface.useGeometry = NavMeshCollectGeometry.RenderMeshes;
 
         // mesmo tipo de agente do inimigo
@@ -323,7 +320,7 @@ public class MapaGerador : MonoBehaviour
             }
         }
 
-        // tiles grandes reduzem as emendas no meio das áreas
+        // tiles grandes deixam menos emenda no meio das áreas
         surface.overrideVoxelSize = false;
         surface.minRegionArea = 2f;
         surface.overrideTileSize = true;
@@ -333,7 +330,7 @@ public class MapaGerador : MonoBehaviour
 
     void GerarInimigo(int x, int y, InimigoDefinicao inimigo, TileDefinicao piso)
     {
-        // nasce 1 m acima do piso pra o agent achar o NavMesh
+        // nasce 1 m acima do piso pro agent achar o NavMesh
         Vector3 centro = CentroDaArea(x, y, 1, 1);
         GameObject obj = Instantiate(inimigo.prefab, centro + Vector3.up * (AlturaDoPiso(piso) + 1f), Quaternion.identity);
         _inimigosGerados.Add(obj);
@@ -349,7 +346,7 @@ public class MapaGerador : MonoBehaviour
         }
     }
 
-    // Objetos altos ficam fora do NavMesh
+    // objetos altos ficam fora do NavMesh
     static void MarcarNaoAndavelSeAlto(GameObject obj)
     {
         if (!CalcularBounds(obj, out Bounds b) || b.max.y <= AlturaMaximaAndavel) return;
@@ -359,7 +356,7 @@ public class MapaGerador : MonoBehaviour
         modificador.area = 1; // Not Walkable
     }
 
-    // Avisa de cores configuradas errado
+    // avisa de cor configurada errada
     void AvisarProblemasDeCor(TileDefinicao[] tiles, List<InimigoDefinicao> inimigosValidos, bool playerValido,
         Dictionary<string, int> coresSemTile, int pontosDeInimigo, bool achouPlayer)
     {
@@ -405,8 +402,8 @@ public class MapaGerador : MonoBehaviour
         return transform.position + new Vector3((x + w / 2f) * tamanhoDoTile, 0f, (y + h / 2f) * tamanhoDoTile);
     }
 
-    // Redimensiona pelo tamanho real do objeto e o apoia no chão, independente de onde está o pivô.
-    // Componentes do tamanhoAlvo <= 0 mantêm o tamanho original naquele eixo.
+    // redimensiona pelo tamanho real do objeto e apoia no chão, não importa onde esteja o pivô.
+    // tamanhoAlvo <= 0 mantém o tamanho original naquele eixo
     static void Encaixar(GameObject obj, Vector3 centro, Vector3 tamanhoAlvo, float baseY)
     {
         if (!CalcularBounds(obj, out Bounds b))
@@ -431,9 +428,9 @@ public class MapaGerador : MonoBehaviour
         SincronizarColliders(obj);
     }
 
-    // Prefabs do ProBuilder guardam a malha num componente próprio e recriam ela sozinhos
-    // ao nascer, mas o MeshCollider às vezes fica apontando pra malha antiga/vazia. Aqui
-    // forço o collider a usar a mesma malha que está sendo desenhada de verdade.
+    // os prefabs do ProBuilder guardam a malha num componente próprio e recriam ela sozinhos ao nascer,
+    // mas o MeshCollider às vezes fica apontando pra malha antiga/vazia.
+    // aqui força o collider a usar a mesma malha que tá sendo desenhada
     static void SincronizarColliders(GameObject obj)
     {
         foreach (MeshCollider colisor in obj.GetComponentsInChildren<MeshCollider>())
@@ -444,10 +441,10 @@ public class MapaGerador : MonoBehaviour
         }
     }
 
-    // Preenche, só na colisão (sem nada visível), a diferença entre a altura visual da
-    // árvore (sempre grama) e a altura real do que está ao redor dela na pixel art.
-    // Só cria o preenchimento quando faz diferença — árvore cercada de grama normal não
-    // ganha nada, só a que forma uma ilha (cercada de algo mais alto, tipo calçada).
+    // preenche só na colisão (nada visível) a diferença entre a altura visual da árvore (sempre grama)
+    // e a altura real do que tá em volta dela na pixel art.
+    // só cria quando faz diferença: árvore cercada de grama normal não ganha nada,
+    // só a que fica numa ilha (cercada de algo mais alto, tipo calçada)
     void AdicionarPreenchimentoDeColisao(int x, int y, float alturaBase, float alturaContexto)
     {
         float alturaPreenchimento = alturaContexto - alturaBase;
@@ -465,17 +462,23 @@ public class MapaGerador : MonoBehaviour
 
     static bool CalcularBounds(GameObject obj, out Bounds bounds)
     {
-        Renderer[] renderers = obj.GetComponentsInChildren<Renderer>();
+        // partículas ficam de fora: o tamanho delas muda com o tempo e empurrava o objeto (ex.: o flare da zona)
         bounds = default;
-        if (renderers.Length == 0) return false;
+        bool achou = false;
 
-        bounds = renderers[0].bounds;
-        for (int i = 1; i < renderers.Length; i++)
-            bounds.Encapsulate(renderers[i].bounds);
-        return true;
+        foreach (Renderer renderer in obj.GetComponentsInChildren<Renderer>())
+        {
+            if (renderer is ParticleSystemRenderer) continue;
+
+            if (!achou) bounds = renderer.bounds;
+            else bounds.Encapsulate(renderer.bounds);
+            achou = true;
+        }
+
+        return achou;
     }
 
-    // Altura da superfície de cima do piso, pra apoiar árvore/inimigo/player em cima dele, não na base
+    // altura do topo do piso, pra apoiar árvore/inimigo/player em cima dele e não na base
     static float AlturaDoPiso(TileDefinicao piso)
     {
         return piso != null ? piso.offsetY + piso.altura : 0f;
@@ -493,9 +496,9 @@ public class MapaGerador : MonoBehaviour
         }
     }
 
-    // O piso embaixo do inimigo é o mais comum entre os 8 pixels vizinhos na pixel art (incluindo diagonais).
-    // Assim ele nasce disfarçado no piso que já está ao redor dele (rua, calçada, grama...).
-    // Prédio não entra na votação — não faz sentido o inimigo "parecer" prédio.
+    // o piso embaixo do inimigo é o mais comum entre os 8 pixels vizinhos (com diagonais).
+    // assim ele nasce disfarçado no piso que já tá em volta (rua, calçada, grama...).
+    // prédio não entra na votação, não faz sentido o inimigo "parecer" prédio
     TileDefinicao PisoDoContexto(int x, int y, int largura, int altura, Color32[] pixels)
     {
         TileDefinicao[] pisos = { grama, rua, calcada, chao };

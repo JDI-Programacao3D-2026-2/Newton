@@ -3,7 +3,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.Serialization;
 
-// Câmera de terceira pessoa sobre o ombro do jogador
+// câmera de terceira pessoa por cima do ombro do player
 public class MouseOrbit : MonoBehaviour
 {
     [FormerlySerializedAs("player")] public Transform jogador;
@@ -32,7 +32,7 @@ public class MouseOrbit : MonoBehaviour
 
     private void Awake()
     {
-        // desliga o Cinemachine: esta câmera é controlada por este script
+        // desliga o Cinemachine, quem controla essa câmera é esse script
         CinemachineCamera cinemachineCam = GetComponent<CinemachineCamera>();
         if (cinemachineCam != null) cinemachineCam.enabled = false;
 
@@ -74,7 +74,7 @@ public class MouseOrbit : MonoBehaviour
         Vector3 back = rotation * Vector3.back;
         float distance = distanciaCamera;
 
-        // aproxima a câmera se houver parede no caminho
+        // aproxima a câmera se tiver parede no caminho
         int mask = camadasColisao.value & ~(1 << jogador.gameObject.layer);
         if (Physics.SphereCast(shoulder, raioColisao, back, out RaycastHit hit, distanciaCamera, mask,
                 QueryTriggerInteraction.Ignore))
@@ -86,7 +86,7 @@ public class MouseOrbit : MonoBehaviour
 
         _camera.SetPositionAndRotation(position, rotation);
 
-        // mantém este objeto na mesma posição da câmera
+        // mantém esse objeto na mesma posição da câmera
         if (_camera != transform) transform.SetPositionAndRotation(position, rotation);
     }
 }

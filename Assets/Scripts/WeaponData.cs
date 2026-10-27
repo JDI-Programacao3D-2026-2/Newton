@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace Game.Combat
 {
-    /// Dados de configuração de uma arma, editáveis no Inspector sem tocar em código.
+    // dados de uma arma, dá pra mexer no Inspector sem mexer no código
     [CreateAssetMenu(fileName = "NewWeaponData", menuName = "Game/Combat/Weapon Data")]
     public class WeaponData : ScriptableObject
     {
@@ -26,7 +26,6 @@ namespace Game.Combat
         public float ProjectileSpeed => velocidadeProjetil;
         public float ProjectileLifetime => tempoVidaProjetil;
 
-     
         public float FireInterval => 1f / cadenciaTiro;
     }
 }

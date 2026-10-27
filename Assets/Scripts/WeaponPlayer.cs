@@ -5,8 +5,8 @@ using UnityEngine.UI;
 
 namespace Game.Combat
 {
-    /// Arma do jogador: o clique esquerdo atira (pool de projéteis, munição e recarga com R).
-    /// Com 'Corpo A Corpo' ligado (Espadachim) o clique golpeia com a espada. Também mostra o placar (Tab).
+    // arma do player: clique esquerdo atira (pool de projéteis, munição e recarga com R).
+    // com 'Corpo A Corpo' ligado (Espadachim) o clique golpeia com a espada. também mostra o placar (Tab)
     public class WeaponPlayer : MonoBehaviour
     {
         [SerializeField] private WeaponData dadosArma;
@@ -45,7 +45,7 @@ namespace Game.Combat
         private float _fimDaRecarga;
         private float _proximoTiro;
 
-        /// Usado pelas habilidades (a rajada precisa saber se este personagem atira).
+        // as habilidades usam (a rajada precisa saber se esse personagem atira)
         public bool CorpoACorpo => corpoACorpo;
 
         private void Awake()
@@ -71,7 +71,7 @@ namespace Game.Combat
         {
             AtualizarFrags();
 
-            // jogo pausado (confirmação de saída, vitória ou derrota): não atira nem recarrega
+            // jogo pausado (saída, vitória ou derrota): não atira nem recarrega
             if (Time.timeScale == 0f) return;
 
             if (_recarregando && Time.time >= _fimDaRecarga) TerminarRecarga();
@@ -80,9 +80,7 @@ namespace Game.Combat
             if (Mouse.current.leftButton.wasPressedThisFrame) Atirar();
         }
 
-        // ---------- HUD ----------
-
-        // Placar enquanto Tab está apertada
+        // placar enquanto o Tab tá apertado
         private void AtualizarFrags()
         {
             bool ver = Keyboard.current.tabKey.isPressed;
@@ -102,8 +100,6 @@ namespace Game.Combat
             textoMunicao.text = _recarregando ? "Recarregando..." : $"Munição: {_municao}/{dadosArma.MagazineSize}" + (_municao == 0 ? "  (R)" : "");
             textoMunicao.color = _municao == 0 ? Color.red : Color.white;
         }
-
-        // ---------- Tiro ----------
 
         private void IniciarRecarga()
         {
@@ -139,7 +135,7 @@ namespace Game.Combat
             Disparar();
         }
 
-        // Lança um projétil do pool agora, sem gastar munição nem respeitar intervalo (a rajada usa isso)
+        // joga um projétil do pool agora, sem gastar munição nem esperar o intervalo (a rajada usa isso)
         public void Disparar()
         {
             Vector3 direcao = DirecaoDaMira();
@@ -150,8 +146,8 @@ namespace Game.Combat
             projetil.Launch(direcao, dadosArma.ProjectileSpeed, dadosArma.Damage, dadosArma.ProjectileLifetime, Devolver);
         }
 
-        /// Ponto que o centro da tela acerta (até 'alcance'); sem nada na frente, o ponto mais longe no ar.
-        /// As habilidades (fumaça e bombardeio) usam a mesma mira.
+        // ponto que o centro da tela acerta (até 'alcance'). se não tiver nada na frente, o ponto mais longe no ar.
+        // fumaça e bombardeio usam a mesma mira
         public Vector3 PontoDaMira(float alcance)
         {
             Camera cam = Camera.main;
@@ -173,7 +169,7 @@ namespace Game.Combat
             return ponto;
         }
 
-        // Do cano até o ponto mirado
+        // do cano até o ponto mirado
         private Vector3 DirecaoDaMira()
         {
             Vector3 direcao = (PontoDaMira(AlcanceDaMira) - bocaDoCano.position).normalized;
@@ -181,8 +177,6 @@ namespace Game.Combat
             // alvo atrás do cano: usa a frente do corpo
             return Vector3.Dot(direcao, transform.forward) > 0.1f ? direcao : transform.forward;
         }
-
-        // ---------- Pool ----------
 
         private Projectile CriarProjetil()
         {
@@ -199,9 +193,7 @@ namespace Game.Combat
             _pool.Enqueue(projetil);
         }
 
-        // ---------- Espada ----------
-
-        // A lâmina desce e, no meio do golpe, o dano vale pra quem estiver na frente
+        // a lâmina desce e no meio do golpe o dano vale pra quem tiver na frente
         private void Golpear()
         {
             if (Time.time < _proximoTiro) return;
@@ -225,7 +217,7 @@ namespace Game.Combat
                 IDamageable alvo = colisor.GetComponentInParent<IDamageable>();
                 if (alvo == null) continue;
 
-                // só quem está na frente (cone) e uma vez por golpe (o inimigo tem mais de um collider)
+                // só quem tá na frente (cone) e uma vez por golpe (o inimigo tem mais de um collider)
                 Vector3 direcao = colisor.transform.position - transform.position;
                 direcao.y = 0f;
                 if (Vector3.Angle(transform.forward, direcao) > anguloEspada * 0.5f) continue;
